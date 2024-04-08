@@ -42,6 +42,7 @@ def main():
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
+    parser.add_argument('--method', default = 'msp')
     args = parser.parse_args()
     anomaly_score_list = []
     ood_gts_list = []
@@ -84,7 +85,11 @@ def main():
         images = images.permute(0,3,1,2)
         with torch.no_grad():
             result = model(images)
-        anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)            
+        if args.method == "msp":
+            softmax_probs = torch.nn.functional.softmax(result.squeeze(0), dim=0)
+            anomaly_result = 1.0 - np.max(softmax_probs.data.cpu().numpy(), axis=0)
+        else:
+            anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)            
         pathGT = path.replace("images", "labels_masks")                
         if "RoadObsticle21" in pathGT:
            pathGT = pathGT.replace("webp", "png")
