@@ -89,8 +89,19 @@ def main(args):
         inputs = Variable(images)
         with torch.no_grad():
             outputs = model(inputs)
+        print(outputs).shape
 
-        iouEvalVal.addBatch(outputs.max(1)[1].unsqueeze(1).data, labels)
+        if args.method == 'max_logit':
+            pred_labels = torch.argmax(outputs, dim=1).unsqueeze(1).data
+        elif args.method == 'msp':
+            softmax_score = F.softmax(outputs, dim=1)
+            pred_labels = torch.argmax(softmax_score, dim=1).unsqueeze(1).data
+        elif args.method == 'max_entropy':
+            softmax_score = F.softmax(outputs, dim=1)
+            ent_score = torch.div(-torch.sum(softmax_score * torch.nn.functional.log_softmax(outputs, dim=1), dim=0), torch.log(torch.tensor(outputs.shape[1])))
+            pred_labels = torch.argmax(ent_score, dim=1).unsqueeze(1).data
+
+        iouEvalVal.addBatch(pred_labels, labels)
 
         filenameSave = filename[0].split("leftImg8bit/")[1] 
 
@@ -145,5 +156,6 @@ if __name__ == '__main__':
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
+    parser.add_argument('--method', default='msp')
 
     main(parser.parse_args())
