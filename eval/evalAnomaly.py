@@ -88,8 +88,11 @@ def main():
         if args.method == "msp":
             softmax_probs = torch.nn.functional.softmax(result.squeeze(0), dim=0)
             anomaly_result = 1.0 - np.max(softmax_probs.data.cpu().numpy(), axis=0)
-        else:
-            anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)            
+        elif args.method == "max_logit":
+            anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)
+        elif args.method == "max_entropy":
+            softmax_probs = torch.nn.functional.softmax(result.squeeze(0), dim=0)
+            anomaly_result = torch.div(-torch.sum(softmax_probs * torch.nn.functional.log_softmax(result.squeeze(0), dim=0), dim=0), torch.log(torch.tensor(result.shape[1]))).data.cpu().numpy()
         pathGT = path.replace("images", "labels_masks")                
         if "RoadObsticle21" in pathGT:
            pathGT = pathGT.replace("webp", "png")
@@ -104,9 +107,14 @@ def main():
         if "RoadAnomaly" in pathGT:
             ood_gts = np.where((ood_gts==2), 1, ood_gts)
         if "LostAndFound" in pathGT:
-            ood_gts = np.where((ood_gts==0), 255, ood_gts)
-            ood_gts = np.where((ood_gts==1), 0, ood_gts)
-            ood_gts = np.where((ood_gts>1)&(ood_gts<201), 1, ood_gts)
+            # ood_gts = np.where((ood_gts==0), 255, ood_gts)
+            # ood_gts = np.where((ood_gts==1), 0, ood_gts)
+            # ood_gts = np.where((ood_gts>1)&(ood_gts<201), 1, ood_gts)
+
+            # remap from StreetHazard
+            ood_gts = np.where((ood_gts==14), 255, ood_gts)
+            ood_gts = np.where((ood_gts<20), 0, ood_gts)
+            ood_gts = np.where((ood_gts==255), 1, ood_gts)
 
         if "Streethazard" in pathGT:
             ood_gts = np.where((ood_gts==14), 255, ood_gts)
