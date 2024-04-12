@@ -82,7 +82,7 @@ def main(args):
     start = time.time()
 
     for step, (images, labels, filename, filenameGt) in enumerate(loader):
-        print(step)
+        # print(step)
         if (not args.cpu):
             images = images.cuda()
             labels = labels.cuda()
@@ -96,10 +96,11 @@ def main(args):
             softmax_score = F.softmax(outputs, dim=1)
             pred_labels = torch.argmax(softmax_score, dim=1).unsqueeze(1).data
         elif args.method == 'max_entropy':
-            softmax_score = F.softmax(outputs, dim=1)
-            ent_score = torch.div(-torch.sum(softmax_score * torch.nn.functional.log_softmax(outputs, dim=1), dim=0), torch.log(torch.tensor(outputs.shape[1]))).unsqueeze(0).data
-            print(f"shape: {ent_score.shape}")
-            pred_labels = torch.argmax(ent_score, dim=1).unsqueeze(1).data
+            # softmax_score = F.softmax(outputs, dim=1)
+            # ent_score = torch.div(-torch.sum(softmax_score * torch.nn.functional.log_softmax(outputs, dim=1), dim=0), torch.log(torch.tensor(outputs.shape[1]))).unsqueeze(0).data
+            # print(f"shape: {ent_score.shape}")
+            # pred_labels = torch.argmax(ent_score, dim=1).unsqueeze(1).data
+            pred_labels = torch.argmax(F.softmax(outputs, dim=1), dim=1).unsqueeze(1).data
 
         iouEvalVal.addBatch(pred_labels, labels)
 
