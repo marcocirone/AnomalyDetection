@@ -49,7 +49,7 @@ class VOC12(Dataset):
         with open(image_path(self.images_root, filename, '.jpg'), 'rb') as f:
             image = load_image(f).convert('RGB')
         with open(image_path(self.labels_root, filename, '.png'), 'rb') as f:
-            label = load_image(f).convert('P')
+            label = load_image(f).convert('L')
 
         if self.input_transform is not None:
             image = self.input_transform(image)
@@ -94,7 +94,7 @@ class cityscapes(Dataset):
         if self.target_transform is not None:
             label = self.target_transform(label)
 
-        return image, label, filename, filenameGt
+        return image, label#, filename, filenameGt
 
     def __len__(self):
         return len(self.filenames)

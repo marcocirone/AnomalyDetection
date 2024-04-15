@@ -48,7 +48,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--method', default = 'msp')
-    parser.add_argument('--temperature')
+    parser.add_argument('--temperature', default = 1)
     args = parser.parse_args()
     anomaly_score_list = []
     ood_gts_list = []
@@ -83,31 +83,30 @@ def main():
 
     model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
     print ("Model and weights LOADED successfully")
-    model.eval()
     
-    if(args.temperature is None):
+    if(float(args.temperature) == -1):
       my_model = ModelWithTemperature(model);
       #Instanting our dataset class
-      input_transform_cityscapes = Compose([
+      input_transform = Compose([
           Resize(512, Image.BILINEAR),
           ToTensor(),
-          ])
-      target_transform_cityscapes = Compose([
+      ])
+      target_transform = Compose([
           Resize(512, Image.NEAREST),
           ToLabel(),
           Relabel(255, 19),   #ignore label to 19
-          ])
+      ])
 
-      valid_dataset = cityscapes(args.datadir, input_transform_cityscapes, target_transform_cityscapes, subset=args.subset)
+      valid_dataset = cityscapes(args.datadir, input_transform, target_transform, subset=args.subset)
       # Instantiate our DataLoader
-      valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=True)
-f
+      valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=True, num_workers=args.num_workers)
       my_model.set_temperature(valid_loader)
       temperature = my_model.tempearature;
       print('Optimal Temperature:', temperature)
       my_model.eval()
     else:
-      temperature = args.temperature
+      model.eval()
+      temperature = float(args.temperature)
 
     for path in glob.glob(os.path.expanduser(str(args.input[0]))):
         print(path)
