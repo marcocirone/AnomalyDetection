@@ -83,7 +83,11 @@ def main():
 
     model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
     print ("Model and weights LOADED successfully")
+<<<<<<< HEAD
     """
+=======
+    
+>>>>>>> e40a8f43c27e522d83ada945c5b9d7e229c61566
     if(float(args.temperature) == -1):
       my_model = ModelWithTemperature(model);
       #Instanting our dataset class
@@ -107,6 +111,7 @@ def main():
     else:
       model.eval()
       temperature = float(args.temperature)
+<<<<<<< HEAD
     """
     # Liste per accumulare AUPRC e FPR per ogni temperatura
     auprc_scores = []
@@ -171,6 +176,78 @@ def main():
 
         ood_mask = (ood_gts == 1)
         ind_mask = (ood_gts == 0)
+=======
+
+    for path in glob.glob(os.path.expanduser(str(args.input[0]))):
+        print(path)
+        images = torch.from_numpy(np.array(Image.open(path).convert('RGB'))).unsqueeze(0).float()
+        images = images.permute(0,3,1,2)
+        with torch.no_grad():
+            result = model(images)
+        if args.method == "msp":
+            softmax_probs = torch.nn.functional.softmax(result.squeeze(0)/temperature, dim=0)
+            anomaly_result = 1.0 - np.max(softmax_probs.data.cpu().numpy(), axis=0)
+        elif args.method == "max_logit":
+            anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)
+        elif args.method == "max_entropy":
+            # softmax_probs = torch.nn.functional.softmax(result.squeeze(0), dim=0)
+            # anomaly_result = torch.div(-torch.sum(softmax_probs * torch.nn.functional.log_softmax(result.squeeze(0), dim=0), dim=0), torch.log(torch.tensor(result.shape[1]))).data.cpu().numpy()
+            softmax_probs = torch.nn.functional.softmax(result.squeeze(0), dim=0)
+            log_softmax_probs = torch.nn.functional.log_softmax(result.squeeze(0), dim=0)
+            anomaly_result = torch.div(-torch.sum(softmax_probs * log_softmax_probs, dim=0),torch.log(torch.tensor(result.shape[1]))).data.cpu().numpy()
+        pathGT = path.replace("images", "labels_masks")                
+        if "RoadObsticle21" in pathGT:
+           pathGT = pathGT.replace("webp", "png")
+        if "fs_static" in pathGT:
+           pathGT = pathGT.replace("jpg", "png")                
+        if "RoadAnomaly" in pathGT:
+           pathGT = pathGT.replace("jpg", "png")  
+
+        mask = Image.open(pathGT)
+        ood_gts = np.array(mask)
+
+        if "RoadAnomaly" in pathGT:
+            ood_gts = np.where((ood_gts==2), 1, ood_gts)
+        if "LostAndFound" in pathGT:
+            # ood_gts = np.where((ood_gts==0), 255, ood_gts)
+            # ood_gts = np.where((ood_gts==1), 0, ood_gts)
+            # ood_gts = np.where((ood_gts>1)&(ood_gts<201), 1, ood_gts)
+
+            # remap from StreetHazard
+            ood_gts = np.where((ood_gts==14), 255, ood_gts)
+            ood_gts = np.where((ood_gts<20), 0, ood_gts)
+            ood_gts = np.where((ood_gts==255), 1, ood_gts)
+
+        if "Streethazard" in pathGT:
+            ood_gts = np.where((ood_gts==14), 255, ood_gts)
+            ood_gts = np.where((ood_gts<20), 0, ood_gts)
+            ood_gts = np.where((ood_gts==255), 1, ood_gts)
+
+        if 1 not in np.unique(ood_gts):
+            continue              
+        else:
+             ood_gts_list.append(ood_gts)
+             anomaly_score_list.append(anomaly_result)
+        del result, anomaly_result, ood_gts, mask
+        torch.cuda.empty_cache()
+
+    file.write( "\n")
+
+    ood_gts = np.array(ood_gts_list)
+    anomaly_scores = np.array(anomaly_score_list)
+
+    ood_mask = (ood_gts == 1)
+    ind_mask = (ood_gts == 0)
+
+    ood_out = anomaly_scores[ood_mask]
+    ind_out = anomaly_scores[ind_mask]
+
+    ood_label = np.ones(len(ood_out))
+    ind_label = np.zeros(len(ind_out))
+    
+    val_out = np.concatenate((ind_out, ood_out))
+    val_label = np.concatenate((ind_label, ood_label))
+>>>>>>> e40a8f43c27e522d83ada945c5b9d7e229c61566
 
         ood_out = anomaly_scores[ood_mask]
         ind_out = anomaly_scores[ind_mask]
