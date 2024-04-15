@@ -7,11 +7,16 @@ import random
 from PIL import Image
 import numpy as np
 from erfnet import ERFNet
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose, CenterCrop, Normalize, Resize
+from torchvision.transforms import ToTensor
+from dataset import cityscapes
+from transform import Relabel, ToLabel
 import os.path as osp
 from argparse import ArgumentParser
 from ood_metrics import fpr_at_95_tpr, calc_metrics, plot_roc, plot_pr,plot_barcode
 from sklearn.metrics import roc_auc_score, roc_curve, auc, precision_recall_curve, average_precision_score
-
+from temperature_scaling import ModelWithTemperature
 seed = 42
 
 # general reproducibility
@@ -43,6 +48,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--method', default = 'msp')
+    parser.add_argument('--temperature')
     args = parser.parse_args()
     anomaly_score_list = []
     ood_gts_list = []
@@ -79,6 +85,30 @@ def main():
     print ("Model and weights LOADED successfully")
     model.eval()
     
+    if(args.temperature is None):
+      my_model = ModelWithTemperature(model);
+      #Instanting our dataset class
+      input_transform_cityscapes = Compose([
+          Resize(512, Image.BILINEAR),
+          ToTensor(),
+          ])
+      target_transform_cityscapes = Compose([
+          Resize(512, Image.NEAREST),
+          ToLabel(),
+          Relabel(255, 19),   #ignore label to 19
+          ])
+
+      valid_dataset = cityscapes(args.datadir, input_transform_cityscapes, target_transform_cityscapes, subset=args.subset)
+      # Instantiate our DataLoader
+      valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=True)
+f
+      my_model.set_temperature(valid_loader)
+      temperature = my_model.tempearature;
+      print('Optimal Temperature:', temperature)
+      my_model.eval()
+    else:
+      temperature = args.temperature
+
     for path in glob.glob(os.path.expanduser(str(args.input[0]))):
         print(path)
         images = torch.from_numpy(np.array(Image.open(path).convert('RGB'))).unsqueeze(0).float()
@@ -86,7 +116,7 @@ def main():
         with torch.no_grad():
             result = model(images)
         if args.method == "msp":
-            softmax_probs = torch.nn.functional.softmax(result.squeeze(0), dim=0)
+            softmax_probs = torch.nn.functional.softmax(result.squeeze(0)/temperature, dim=0)
             anomaly_result = 1.0 - np.max(softmax_probs.data.cpu().numpy(), axis=0)
         elif args.method == "max_logit":
             anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)
