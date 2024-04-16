@@ -43,6 +43,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--method', default = 'msp')
+    parser.add_argument('--temperature', default = 1.0)
     args = parser.parse_args()
     anomaly_score_list = []
     ood_gts_list = []
