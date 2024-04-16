@@ -211,6 +211,8 @@ def train(args, model, enc=False):
     for epoch in range(start_epoch, args.num_epochs+1):
         print("----- TRAINING - EPOCH", epoch, "-----")
 
+        begin_epoch = time.time()
+
         scheduler.step(epoch)    ## scheduler 2
 
         epoch_loss = []
@@ -394,7 +396,8 @@ def train(args, model, enc=False):
         #Epoch		Train-loss		Test-loss	Train-IoU	Test-IoU		learningRate
         with open(automated_log_path, "a") as myfile:
             myfile.write("\n%d\t\t%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t%.8f" % (epoch, average_epoch_loss_train, average_epoch_loss_val, iouTrain, iouVal, usedLr ))
-    
+    print(f"Time spent for epoch: {time.time() - begin_epoch}")   
+
     return(model)   #return model (convenience for encoder-decoder training)
 
 def save_checkpoint(state, is_best, filenameCheckpoint, filenameBest):
