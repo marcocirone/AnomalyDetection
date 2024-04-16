@@ -81,7 +81,6 @@ class CrossEntropyLoss2d(torch.nn.Module):
     def forward(self, outputs, targets):
         return self.loss(torch.nn.functional.log_softmax(outputs, dim=1), targets)
 
-
 def train(args, model, enc=False):
     best_acc = 0
 
@@ -98,8 +97,6 @@ def train(args, model, enc=False):
         weights = 1 / (label_counts / total_samples)
 
         return weights
-    
-    
 
     # weight = torch.ones(NUM_CLASSES)
     # if (enc):
@@ -152,7 +149,11 @@ def train(args, model, enc=False):
     dataset_train = cityscapes(args.datadir, co_transform, 'train')
     dataset_val = cityscapes(args.datadir, co_transform_val, 'val')
 
-    weight = calculate_weights(dataset_train)
+    # weight = calculate_weights(dataset_train)
+    weight = torch.tensor([3.0633,   18.5455,    4.9377,  171.8278,  128.4513,   91.6931,
+         541.4980,  204.2662,    7.0819,   97.3602,   27.9870,   92.8342,
+         838.7665,   16.1329,  422.4510,  479.7953,  485.2308, 1149.6392,
+         272.9657,    8.7985])
 
     loader = DataLoader(dataset_train, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=True)
     loader_val = DataLoader(dataset_val, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False)
@@ -249,7 +250,7 @@ def train(args, model, enc=False):
             loss.backward()
             optimizer.step()
 
-            epoch_loss.append(loss.data[0])
+            epoch_loss.append(loss.item())
             time_train.append(time.time() - start_time)
 
             if (doIouTrain):
@@ -309,7 +310,7 @@ def train(args, model, enc=False):
             outputs = model(inputs, only_encode=enc) 
 
             loss = criterion(outputs, targets[:, 0])
-            epoch_loss_val.append(loss.data[0])
+            epoch_loss_val.append(loss.item())
             time_val.append(time.time() - start_time)
 
 
