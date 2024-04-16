@@ -88,49 +88,62 @@ def train(args, model, enc=False):
     #TODO: calculate weights by processing dataset histogram (now its being set by hand from the torch values)
     #create a loder to run all images and calculate histogram of labels, then create weight array using class balancing
 
-    weight = torch.ones(NUM_CLASSES)
-    if (enc):
-        weight[0] = 2.3653597831726	
-        weight[1] = 4.4237880706787	
-        weight[2] = 2.9691488742828	
-        weight[3] = 5.3442072868347	
-        weight[4] = 5.2983593940735	
-        weight[5] = 5.2275490760803	
-        weight[6] = 5.4394111633301	
-        weight[7] = 5.3659925460815	
-        weight[8] = 3.4170460700989	
-        weight[9] = 5.2414722442627	
-        weight[10] = 4.7376127243042	
-        weight[11] = 5.2286224365234	
-        weight[12] = 5.455126285553	
-        weight[13] = 4.3019247055054	
-        weight[14] = 5.4264230728149	
-        weight[15] = 5.4331531524658	
-        weight[16] = 5.433765411377	
-        weight[17] = 5.4631009101868	
-        weight[18] = 5.3947434425354
-    else:
-        weight[0] = 2.8149201869965	
-        weight[1] = 6.9850029945374	
-        weight[2] = 3.7890393733978	
-        weight[3] = 9.9428062438965	
-        weight[4] = 9.7702074050903	
-        weight[5] = 9.5110931396484	
-        weight[6] = 10.311357498169	
-        weight[7] = 10.026463508606	
-        weight[8] = 4.6323022842407	
-        weight[9] = 9.5608062744141	
-        weight[10] = 7.8698215484619	
-        weight[11] = 9.5168733596802	
-        weight[12] = 10.373730659485	
-        weight[13] = 6.6616044044495	
-        weight[14] = 10.260489463806	
-        weight[15] = 10.287888526917	
-        weight[16] = 10.289801597595	
-        weight[17] = 10.405355453491	
-        weight[18] = 10.138095855713	
+    def calculate_weights(dataset):
+        label_counts = torch.zeros(NUM_CLASSES)
+        for data in dataset:
+            _, labels = data
+            label_counts += torch.bincount(labels.flatten(), minlength=NUM_CLASSES)
 
-    weight[19] = 0
+        total_samples = sum(label_counts)
+        weights = 1 / (label_counts / total_samples)
+
+        return weights
+    
+    
+
+    # weight = torch.ones(NUM_CLASSES)
+    # if (enc):
+    #     weight[0] = 2.3653597831726	
+    #     weight[1] = 4.4237880706787	
+    #     weight[2] = 2.9691488742828	
+    #     weight[3] = 5.3442072868347	
+    #     weight[4] = 5.2983593940735	
+    #     weight[5] = 5.2275490760803	
+    #     weight[6] = 5.4394111633301	
+    #     weight[7] = 5.3659925460815	
+    #     weight[8] = 3.4170460700989	
+    #     weight[9] = 5.2414722442627	
+    #     weight[10] = 4.7376127243042	
+    #     weight[11] = 5.2286224365234	
+    #     weight[12] = 5.455126285553	
+    #     weight[13] = 4.3019247055054	
+    #     weight[14] = 5.4264230728149	
+    #     weight[15] = 5.4331531524658	
+    #     weight[16] = 5.433765411377	
+    #     weight[17] = 5.4631009101868	
+    #     weight[18] = 5.3947434425354
+    # else:
+    #     weight[0] = 2.8149201869965	
+    #     weight[1] = 6.9850029945374	
+    #     weight[2] = 3.7890393733978	
+    #     weight[3] = 9.9428062438965	
+    #     weight[4] = 9.7702074050903	
+    #     weight[5] = 9.5110931396484	
+    #     weight[6] = 10.311357498169	
+    #     weight[7] = 10.026463508606	
+    #     weight[8] = 4.6323022842407	
+    #     weight[9] = 9.5608062744141	
+    #     weight[10] = 7.8698215484619	
+    #     weight[11] = 9.5168733596802	
+    #     weight[12] = 10.373730659485	
+    #     weight[13] = 6.6616044044495	
+    #     weight[14] = 10.260489463806	
+    #     weight[15] = 10.287888526917	
+    #     weight[16] = 10.289801597595	
+    #     weight[17] = 10.405355453491	
+    #     weight[18] = 10.138095855713	
+
+    # weight[19] = 0
 
     assert os.path.exists(args.datadir), "Error: datadir (dataset directory) could not be loaded"
 
@@ -138,6 +151,8 @@ def train(args, model, enc=False):
     co_transform_val = MyCoTransform(enc, augment=False, height=args.height)#1024)
     dataset_train = cityscapes(args.datadir, co_transform, 'train')
     dataset_val = cityscapes(args.datadir, co_transform_val, 'val')
+
+    weight = calculate_weights(dataset_train)
 
     loader = DataLoader(dataset_train, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=True)
     loader_val = DataLoader(dataset_val, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False)
@@ -430,7 +445,7 @@ def main(args):
         #print(torch.load(args.state))
         model = load_my_state_dict(model, torch.load(args.state))
 
-    """
+    '''
     def weights_init(m):
         classname = m.__class__.__name__
         if classname.find('Conv') != -1:
@@ -453,7 +468,7 @@ def main(args):
     f = open('weights5.txt', 'w')
     f.write(str(model.state_dict()))
     f.close()
-    """
+    '''
 
     #train(args, model)
     if (not args.decoder):
