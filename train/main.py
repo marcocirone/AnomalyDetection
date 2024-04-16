@@ -17,7 +17,7 @@ from torch.optim import SGD, Adam, lr_scheduler
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, CenterCrop, Normalize, Resize, Pad
-from torchvision.transforms import ToTensor, ToPILImage
+from torchvision.transforms import ToTensor, ToPILImage, transforms
 
 from dataset import VOC12,cityscapes
 from transform import Relabel, ToLabel, Colorize
@@ -36,15 +36,20 @@ image_transform = ToPILImage()
 
 #Augmentations - different function implemented to perform random augments on both image and target
 class MyCoTransform(object):
-    def __init__(self, enc, augment=True, height=512):
+    def __init__(self, enc, model='erfnet', augment=True, height=512):
         self.enc=enc
         self.augment = augment
         self.height = height
+        self.model = model
         pass
     def __call__(self, input, target):
         # do something to both images
-        input =  Resize(self.height, Image.BILINEAR)(input)
-        target = Resize(self.height, Image.NEAREST)(target)
+        if self.model == 'erfnet':
+            input = Resize(self.height, Image.BILINEAR)(input)
+            target = Resize(self.height, Image.NEAREST)(target)
+        elif self.model == 'enet':
+            input = Resize((self.height, self.height), Image.BILINEAR)(input)
+            target = Resize((self.height, self.height), Image.NEAREST)(target)
 
         if(self.augment):
             # Random hflip
@@ -60,7 +65,7 @@ class MyCoTransform(object):
             input = ImageOps.expand(input, border=(transX,transY,0,0), fill=0)
             target = ImageOps.expand(target, border=(transX,transY,0,0), fill=255) #pad label filling with 255
             input = input.crop((0, 0, input.size[0]-transX, input.size[1]-transY))
-            target = target.crop((0, 0, target.size[0]-transX, target.size[1]-transY))   
+            target = target.crop((0, 0, target.size[0]-transX, target.size[1]-transY)) 
 
         input = ToTensor()(input)
         if (self.enc):
@@ -144,8 +149,8 @@ def train(args, model, enc=False):
 
     assert os.path.exists(args.datadir), "Error: datadir (dataset directory) could not be loaded"
 
-    co_transform = MyCoTransform(enc, augment=True, height=args.height)#1024)
-    co_transform_val = MyCoTransform(enc, augment=False, height=args.height)#1024)
+    co_transform = MyCoTransform(enc, model=args.model, augment=True, height=args.height)#1024)
+    co_transform_val = MyCoTransform(enc, model=args.model, augment=False, height=args.height)#1024)
     dataset_train = cityscapes(args.datadir, co_transform, 'train')
     dataset_val = cityscapes(args.datadir, co_transform_val, 'val')
 
@@ -243,7 +248,8 @@ def train(args, model, enc=False):
 
             inputs = Variable(images)
             targets = Variable(labels)
-            outputs = model(inputs, only_encode=enc)
+            # outputs = model(inputs, only_encode=enc)
+            outputs = model(inputs)
 
             #print("targets", np.unique(targets[:, 0].cpu().data.numpy()))
 
@@ -309,7 +315,8 @@ def train(args, model, enc=False):
 
             inputs = Variable(images, volatile=True)    #volatile flag makes it free backward or outputs for eval
             targets = Variable(labels, volatile=True)
-            outputs = model(inputs, only_encode=enc) 
+            #outputs = model(inputs, only_encode=enc) if you are training erfnet
+            outputs = model(inputs) 
 
             loss = criterion(outputs, targets[:, 0])
             epoch_loss_val.append(loss.item())
@@ -396,7 +403,7 @@ def train(args, model, enc=False):
         #Epoch		Train-loss		Test-loss	Train-IoU	Test-IoU		learningRate
         with open(automated_log_path, "a") as myfile:
             myfile.write("\n%d\t\t%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t%.8f" % (epoch, average_epoch_loss_train, average_epoch_loss_val, iouTrain, iouVal, usedLr ))
-    print(f"Time spent for epoch: {time.time() - begin_epoch}")   
+        print(f"Time spent for epoch: {time.time() - begin_epoch}")   
 
     return(model)   #return model (convenience for encoder-decoder training)
 
@@ -447,7 +454,7 @@ def main(args):
             return model
 
         #print(torch.load(args.state))
-        model = load_my_state_dict(model, torch.load(args.state))
+        #model = load_my_state_dict(model, torch.load(args.state))
 
     '''
     def weights_init(m):
@@ -496,6 +503,7 @@ def main(args):
         if args.cuda:
             model = torch.nn.DataParallel(model).cuda()
         #When loading encoder reinitialize weights for decoder because they are set to 0 when training dec
+    print("Allelulia")
     model = train(args, model, False)   #Train decoder
     print("========== TRAINING FINISHED ===========")
 
