@@ -44,7 +44,7 @@ class MyCoTransform(object):
         pass
     def __call__(self, input, target):
         # do something to both images
-        if self.model == 'erfnet':
+        if self.model == 'erfnet' or self.model == 'bisenet':
             input = Resize(self.height, Image.BILINEAR)(input)
             target = Resize(self.height, Image.NEAREST)(target)
         elif self.model == 'enet':
@@ -248,12 +248,18 @@ def train(args, model, enc=False):
 
             inputs = Variable(images)
             targets = Variable(labels)
-            # outputs = model(inputs, only_encode=enc)
-            outputs = model(inputs)
+            if args.model == 'erfnet':
+                outputs = model(inputs, only_encode=enc) #if you are training erfnet
+            elif args.model == 'enet':
+                outputs = model(inputs) 
+            else:
+                outputs, _, _ = model(inputs)
 
             #print("targets", np.unique(targets[:, 0].cpu().data.numpy()))
 
             optimizer.zero_grad()
+            #print(f"Outputs: {outputs.shape}")
+            #print(f"Targets: {targets.shape}")
             loss = criterion(outputs, targets[:, 0])
             loss.backward()
             optimizer.step()
@@ -315,8 +321,12 @@ def train(args, model, enc=False):
 
             inputs = Variable(images, volatile=True)    #volatile flag makes it free backward or outputs for eval
             targets = Variable(labels, volatile=True)
-            #outputs = model(inputs, only_encode=enc) if you are training erfnet
-            outputs = model(inputs) 
+            if args.model == 'erfnet':
+                outputs = model(inputs, only_encode=enc) #if you are training erfnet
+            elif args.model == 'enet':
+                outputs = model(inputs) 
+            else:
+                outputs, _, _ = model(inputs)
 
             loss = criterion(outputs, targets[:, 0])
             epoch_loss_val.append(loss.item())

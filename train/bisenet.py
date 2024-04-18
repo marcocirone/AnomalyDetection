@@ -9,7 +9,7 @@ import torchvision
 import torch.utils.model_zoo as modelzoo
 
 # from resnet import Resnet18
-from modules.bn import InPlaceABNSync as BatchNorm2d
+# from bn import InPlaceABNSync as BatchNorm2d1
 
 resnet18_url = 'https://download.pytorch.org/models/resnet18-5c106cde.pth'
 
@@ -167,7 +167,7 @@ class AttentionRefinementModule(nn.Module):
         super(AttentionRefinementModule, self).__init__()
         self.conv = ConvBNReLU(in_chan, out_chan, ks=3, stride=1, padding=1)
         self.conv_atten = nn.Conv2d(out_chan, out_chan, kernel_size= 1, bias=False)
-        self.bn_atten = BatchNorm2d(out_chan, activation='none')
+        self.bn_atten = BatchNorm2d(out_chan)
         self.sigmoid_atten = nn.Sigmoid()
         self.init_weight()
 
