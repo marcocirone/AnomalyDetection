@@ -168,7 +168,7 @@ def train(args, model, enc=False):
     criterion = CrossEntropyLoss2d(weight)
     print(type(criterion))
 
-    savedir = f'../save/{args.savedir}'
+    savedir = f'/content/drive/MyDrive/save/{args.savedir}'
 
     if (enc):
         automated_log_path = savedir + "/automated_log_encoder.txt"
@@ -195,9 +195,12 @@ def train(args, model, enc=False):
         #Must load weights, optimizer, epoch and best value. 
         if enc:
             filenameCheckpoint = savedir + '/checkpoint_enc.pth.tar'
+            print("checkpoint", filenameCheckpoint)
         else:
             filenameCheckpoint = savedir + '/checkpoint.pth.tar'
-
+            print("checkpoint", filenameCheckpoint)
+        print("ciao")
+        print("checkpoint", filenameCheckpoint)
         assert os.path.exists(filenameCheckpoint), "Error: resume option was used but checkpoint was not found in folder"
         checkpoint = torch.load(filenameCheckpoint)
         start_epoch = checkpoint['epoch']
@@ -381,6 +384,7 @@ def train(args, model, enc=False):
         else:
             filenameCheckpoint = savedir + '/checkpoint.pth.tar'
             filenameBest = savedir + '/model_best.pth.tar'
+        print("checkpoint: ", filenameCheckpoint)
         save_checkpoint({
             'epoch': epoch + 1,
             'arch': str(model),
