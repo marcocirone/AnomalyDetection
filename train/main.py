@@ -13,6 +13,7 @@ import math
 from PIL import Image, ImageOps
 from argparse import ArgumentParser
 
+import torch.nn as nn
 from torch.optim import SGD, Adam, lr_scheduler
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -215,6 +216,11 @@ def train(args, model, enc=False):
 
     if args.visualize and args.steps_plot > 0:
         board = Dashboard(args.port)
+
+    if args.model == 'erfnet':
+        for param in model.parameters():
+            param.requires_grad=False
+        model.decoder.output_conv = nn.ConvTranspose2d( 16, NUM_CLASSES, 2, stride=2, padding=0, output_padding=0, bias=True)
 
     for epoch in range(start_epoch, args.num_epochs+1):
         print("----- TRAINING - EPOCH", epoch, "-----")
@@ -517,7 +523,21 @@ def main(args):
         if args.cuda:
             model = torch.nn.DataParallel(model).cuda()
         #When loading encoder reinitialize weights for decoder because they are set to 0 when training dec
-    print("Allelulia")
+    print("Alleluia")
+    if args.model == 'erfnet':
+        def load_my_state_dict(model, state_dict):  #custom function to load model when not all dict elements
+            own_state = model.state_dict()
+            for name, param in state_dict.items():
+                if name not in own_state:
+                    if name.startswith("module."):
+                        own_state[name.split("module.")[-1]].copy_(param)
+                    else:
+                        print(name, " not loaded")
+                        continue
+                else:
+                    own_state[name].copy_(param)
+            return model
+        model = load_my_state_dict(model, torch.load("/content/AnomalyDetection/eval/trained_models/erfnet_pretrained.pth", map_location=lambda storage, loc: storage))
     model = train(args, model, False)   #Train decoder
     print("========== TRAINING FINISHED ===========")
 
