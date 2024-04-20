@@ -115,7 +115,7 @@ def main():
             tested_dataset = "RoadObsticle21"
             pathGT = pathGT.replace("webp", "png")
           if "fs_static" in pathGT:
-            tested_dataset = "fs_static "
+            tested_dataset = "FS static "
             pathGT = pathGT.replace("jpg", "png")                
           if "RoadAnomaly" in pathGT:
             tested_dataset = "RoadAnomaly"
