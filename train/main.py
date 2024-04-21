@@ -217,11 +217,13 @@ def train(args, model, enc=False):
     if args.visualize and args.steps_plot > 0:
         board = Dashboard(args.port)
 
+
+    """
     if args.model == 'erfnet':
         for param in model.parameters():
             param.requires_grad=False
         model.decoder.output_conv = nn.ConvTranspose2d( 16, NUM_CLASSES, 2, stride=2, padding=0, output_padding=0, bias=True)
-
+    """
     for epoch in range(start_epoch, args.num_epochs+1):
         print("----- TRAINING - EPOCH", epoch, "-----")
 
@@ -435,7 +437,7 @@ def save_checkpoint(state, is_best, filenameCheckpoint, filenameBest):
 
 
 def main(args):
-    savedir = f'../save/{args.savedir}'
+    savedir = f'/content/drive/MyDrive/save/{args.savedir}'
 
     if not os.path.exists(savedir):
         os.makedirs(savedir)
@@ -537,7 +539,7 @@ def main(args):
                 else:
                     own_state[name].copy_(param)
             return model
-        model = load_my_state_dict(model, torch.load("/content/AnomalyDetection/eval/trained_models/erfnet_pretrained.pth", map_location=lambda storage, loc: storage))
+        model = load_my_state_dict(model, torch.load("/content/AnomalyDetection/trained_models/erfnet_pretrained.pth", map_location=lambda storage, loc: storage))
     model = train(args, model, False)   #Train decoder
     print("========== TRAINING FINISHED ===========")
 
