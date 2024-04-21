@@ -29,7 +29,7 @@ torch.backends.cudnn.benchmark = True
 
 #caricamento stato del modello
 def load_my_state_dict(model, state_dict, model_name):  #custom function to load model when not all dict elements
-        if(model == 'ERFNet'):
+        if(model_name == 'ERFNet'):
             own_state = model.state_dict()
             for name, param in state_dict.items():
                 if name not in own_state:
@@ -95,7 +95,7 @@ def main():
         model.load_state_dict(state_dict)
     else:
         model = load_my_state_dict(model, state_dict, args.model)
-
+    #print(model)
     print ("Model and weights LOADED successfully")
     model.eval()
     
@@ -115,7 +115,7 @@ def main():
             tested_dataset = "RoadObsticle21"
             pathGT = pathGT.replace("webp", "png")
           if "fs_static" in pathGT:
-            tested_dataset = "fs_static "
+            tested_dataset = "FS static "
             pathGT = pathGT.replace("jpg", "png")                
           if "RoadAnomaly" in pathGT:
             tested_dataset = "RoadAnomaly"

@@ -15,3 +15,11 @@ Model: BiSeNet    AUPRC score:24.937611753143752   FPR@TPR95:87.01905376463276
 Model: BiSeNet    AUPRC score:3.4721492505045894   FPR@TPR95:48.782574424910905
 ############################### Dataset: fs_static  ###############################
 Model: BiSeNet    AUPRC score:1.737034754440329   FPR@TPR95:94.5882828243387
+############################### Dataset: RoadAnomaly ###############################
+Model: ERFNet    AUPRC score:10.74387285569501  FPR@TPR95: 96.30569928292485   
+############################### Dataset: RoadAnomaly21 ###############################
+Model: ERFNet    AUPRC score: 15.156143502138047  FPR@TPR95: 95.96405662157579
+############################### Dataset: RoadObsticle21 ###############################
+Model: ERFNet    AUPRC score: 0.6143785309492709  FPR@TPR95: 89.991321128201
+############################### Dataset: fs_static  ###############################
+Model: ERFNet    AUPRC score: 2.277680821152387   FPR@TPR95: 96.33338626735703
