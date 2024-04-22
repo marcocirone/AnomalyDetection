@@ -23,3 +23,5 @@ Model: ERFNet    AUPRC score: 15.156143502138047  FPR@TPR95: 95.96405662157579
 Model: ERFNet    AUPRC score: 0.6143785309492709  FPR@TPR95: 89.991321128201
 ############################### Dataset: fs_static  ###############################
 Model: ERFNet    AUPRC score: 2.277680821152387   FPR@TPR95: 96.33338626735703
+############################### Dataset: FS Lost and Found ###############################
+Model: ERFNet    AUPRC score:0.40757130118449053   FPR@TPR95:87.50205427997237

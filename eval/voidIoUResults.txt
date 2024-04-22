@@ -1,0 +1,75 @@
+---------------------------------------
+Model ENet Took 133.7105278968811 seconds
+=======================================
+Per-Class IoU:
+57.27 Road
+4.66 sidewalk
+0.17 building
+0.01 wall
+0.00 fence
+0.60 pole
+0.95 traffic light
+1.02 traffic sign
+0.37 vegetation
+0.60 terrain
+0.01 sky
+2.42 person
+0.00 rider
+0.00 car
+0.00 truck
+0.00 bus
+0.00 train
+0.00 motorcycle
+2.20 bicycle
+=======================================
+MEAN IoU:  3.70 %
+---------------------------------------
+Model ERFNet Took 93.52724885940552 seconds
+=======================================
+Per-Class IoU:
+94.24 Road
+68.52 sidewalk
+77.48 building
+29.63 wall
+20.57 fence
+47.39 pole
+44.95 traffic light
+54.30 traffic sign
+77.69 vegetation
+48.91 terrain
+71.70 sky
+52.84 person
+27.26 rider
+63.30 car
+33.20 truck
+40.63 bus
+5.67 train
+15.50 motorcycle
+60.89 bicycle
+=======================================
+MEAN IoU:  49.19 %
+---------------------------------------
+Model BiSeNet Took 93.0472719669342 seconds
+=======================================
+Per-Class IoU:
+85.58 Road
+48.51 sidewalk
+57.92 building
+13.10 wall
+18.48 fence
+20.07 pole
+9.17 traffic light
+28.39 traffic sign
+71.91 vegetation
+28.60 terrain
+71.90 sky
+48.76 person
+19.87 rider
+73.15 car
+11.72 truck
+27.39 bus
+6.50 train
+7.37 motorcycle
+24.28 bicycle
+=======================================
+MEAN IoU:  35.40 %
