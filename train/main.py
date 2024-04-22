@@ -104,49 +104,49 @@ def train(args, model, enc=False):
 
         return weights
 
-    # weight = torch.ones(NUM_CLASSES)
-    # if (enc):
-    #     weight[0] = 2.3653597831726	
-    #     weight[1] = 4.4237880706787	
-    #     weight[2] = 2.9691488742828	
-    #     weight[3] = 5.3442072868347	
-    #     weight[4] = 5.2983593940735	
-    #     weight[5] = 5.2275490760803	
-    #     weight[6] = 5.4394111633301	
-    #     weight[7] = 5.3659925460815	
-    #     weight[8] = 3.4170460700989	
-    #     weight[9] = 5.2414722442627	
-    #     weight[10] = 4.7376127243042	
-    #     weight[11] = 5.2286224365234	
-    #     weight[12] = 5.455126285553	
-    #     weight[13] = 4.3019247055054	
-    #     weight[14] = 5.4264230728149	
-    #     weight[15] = 5.4331531524658	
-    #     weight[16] = 5.433765411377	
-    #     weight[17] = 5.4631009101868	
-    #     weight[18] = 5.3947434425354
-    # else:
-    #     weight[0] = 2.8149201869965	
-    #     weight[1] = 6.9850029945374	
-    #     weight[2] = 3.7890393733978	
-    #     weight[3] = 9.9428062438965	
-    #     weight[4] = 9.7702074050903	
-    #     weight[5] = 9.5110931396484	
-    #     weight[6] = 10.311357498169	
-    #     weight[7] = 10.026463508606	
-    #     weight[8] = 4.6323022842407	
-    #     weight[9] = 9.5608062744141	
-    #     weight[10] = 7.8698215484619	
-    #     weight[11] = 9.5168733596802	
-    #     weight[12] = 10.373730659485	
-    #     weight[13] = 6.6616044044495	
-    #     weight[14] = 10.260489463806	
-    #     weight[15] = 10.287888526917	
-    #     weight[16] = 10.289801597595	
-    #     weight[17] = 10.405355453491	
-    #     weight[18] = 10.138095855713	
+    weight = torch.ones(NUM_CLASSES)
+    if (enc):
+        weight[0] = 2.3653597831726	
+        weight[1] = 4.4237880706787	
+        weight[2] = 2.9691488742828	
+        weight[3] = 5.3442072868347	
+        weight[4] = 5.2983593940735	
+        weight[5] = 5.2275490760803	
+        weight[6] = 5.4394111633301	
+        weight[7] = 5.3659925460815	
+        weight[8] = 3.4170460700989	
+        weight[9] = 5.2414722442627	
+        weight[10] = 4.7376127243042	
+        weight[11] = 5.2286224365234	
+        weight[12] = 5.455126285553	
+        weight[13] = 4.3019247055054	
+        weight[14] = 5.4264230728149	
+        weight[15] = 5.4331531524658	
+        weight[16] = 5.433765411377	
+        weight[17] = 5.4631009101868	
+        weight[18] = 5.3947434425354
+    else:
+        weight[0] = 2.8149201869965	
+        weight[1] = 6.9850029945374	
+        weight[2] = 3.7890393733978	
+        weight[3] = 9.9428062438965	
+        weight[4] = 9.7702074050903	
+        weight[5] = 9.5110931396484	
+        weight[6] = 10.311357498169	
+        weight[7] = 10.026463508606	
+        weight[8] = 4.6323022842407	
+        weight[9] = 9.5608062744141	
+        weight[10] = 7.8698215484619	
+        weight[11] = 9.5168733596802	
+        weight[12] = 10.373730659485	
+        weight[13] = 6.6616044044495	
+        weight[14] = 10.260489463806	
+        weight[15] = 10.287888526917	
+        weight[16] = 10.289801597595	
+        weight[17] = 10.405355453491	
+        weight[18] = 10.138095855713	
 
-    # weight[19] = 0
+    weight[19] = 1
 
     assert os.path.exists(args.datadir), "Error: datadir (dataset directory) could not be loaded"
 
@@ -156,10 +156,10 @@ def train(args, model, enc=False):
     dataset_val = cityscapes(args.datadir, co_transform_val, 'val')
 
     # weight = calculate_weights(dataset_train)
-    weight = torch.tensor([3.0633,   18.5455,    4.9377,  171.8278,  128.4513,   91.6931,
-         541.4980,  204.2662,    7.0819,   97.3602,   27.9870,   92.8342,
-         838.7665,   16.1329,  422.4510,  479.7953,  485.2308, 1149.6392,
-         272.9657,    8.7985])
+    # weight = torch.tensor([3.0633,   18.5455,    4.9377,  171.8278,  128.4513,   91.6931,
+    #      541.4980,  204.2662,    7.0819,   97.3602,   27.9870,   92.8342,
+    #      838.7665,   16.1329,  422.4510,  479.7953,  485.2308, 1149.6392,
+    #      272.9657,    8.7985])
 
     loader = DataLoader(dataset_train, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=True)
     loader_val = DataLoader(dataset_val, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False)
@@ -189,7 +189,7 @@ def train(args, model, enc=False):
     #TODO: reduce memory in first gpu: https://discuss.pytorch.org/t/multi-gpu-training-memory-usage-in-balance/4163/4        #https://github.com/pytorch/pytorch/issues/1893
 
     #optimizer = Adam(model.parameters(), 5e-4, (0.9, 0.999),  eps=1e-08, weight_decay=2e-4)     ## scheduler 1
-    optimizer = Adam(model.parameters(), 5e-4, (0.9, 0.999),  eps=1e-08, weight_decay=1e-4)      ## scheduler 2
+    optimizer = Adam(model.parameters(), 5e-5, (0.9, 0.999),  eps=1e-08, weight_decay=1e-4)      ## scheduler 2
 
     start_epoch = 1
     if args.resume:
@@ -467,13 +467,18 @@ def main(args):
         #state_dict = {k.partition('model.')[2]: v for k,v in state_dict}
         #https://discuss.pytorch.org/t/prefix-parameter-names-in-saved-model-if-trained-by-multi-gpu/494
         """
-        def load_my_state_dict(model, state_dict):  #custom function to load model when not all dict keys are there
-            own_state = model.state_dict()
-            for name, param in state_dict.items():
-                if name not in own_state:
-                     continue
-                own_state[name].copy_(param)
-            return model
+        # def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
+        #     own_state = model.state_dict()
+        #     for name, param in state_dict.items():
+        #         if name not in own_state:
+        #             if name.startswith('module.'):
+        #                 own_state[name.split('module.')[-1]].copy_(param)
+        #             else:
+        #                 print(name, ' not loaded')
+        #                 continue
+        #         else:
+        #             own_state[name].copy_(param)
+        #     return model
 
         #print(torch.load(args.state))
         #model = load_my_state_dict(model, torch.load(args.state))
@@ -527,14 +532,14 @@ def main(args):
         #When loading encoder reinitialize weights for decoder because they are set to 0 when training dec
     print("Alleluia")
     if args.model == 'erfnet':
-        def load_my_state_dict(model, state_dict):  #custom function to load model when not all dict elements
+        def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
             own_state = model.state_dict()
             for name, param in state_dict.items():
                 if name not in own_state:
-                    if name.startswith("module."):
-                        own_state[name.split("module.")[-1]].copy_(param)
+                    if name.startswith('module.'):
+                        own_state[name.split('module.')[-1]].copy_(param)
                     else:
-                        print(name, " not loaded")
+                        print(name, ' not loaded')
                         continue
                 else:
                     own_state[name].copy_(param)
