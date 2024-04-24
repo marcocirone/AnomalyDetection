@@ -155,6 +155,7 @@ class ERFNet(nn.Module):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = ERFNet(20).to(device = device)
+### GLOBAL PRUNING ####
 
 def get_parameters_to_prune(module):
     parameters_to_prune = []
@@ -166,9 +167,10 @@ def get_parameters_to_prune(module):
               #print(name)
               if 'weight' in name:
                   #print(name)
-                  parameters_to_prune.append((layer, param))
+                  parameters_to_prune.append((layer, name))
     return parameters_to_prune
-
+                    
+"""
 parameters_to_prune = get_parameters_to_prune(model)
 print(len(parameters_to_prune))
 def count_layers_with_weights(module):
@@ -187,45 +189,75 @@ num_decoder_layers_with_weights = count_layers_with_weights(model.decoder)
 
 
 print("Numero di layer nell'encoder + decoder: ", num_encoder_layers_with_weights + num_decoder_layers_with_weights)
-#pruning
+"""
+parameters_to_prune = get_parameters_to_prune(model)
+print(parameters_to_prune)
+
+#print(type(parameters_to_prune[0][1]))
+#global pruning
 prune.global_unstructured(
     parameters_to_prune,
     pruning_method=prune.L1Unstructured,
     amount=0.2,
 )
-"""
-#checking sparsity
+
+#checking sparsity for every layer
 def check_sparsity(module):
-  for layer in module.children():
-    if list(layer.children()):
+    for layer in module.children():
+        if list(layer.children()):
+            # Se il layer ha figli, esaminare ricorsivamente i figli
             check_sparsity(layer)
-    else:
-          for name, param in layer.named_parameters():
-                if 'weight' in name:
-                  print("Sparsity in "+name+" : {:.2f}%".format(
-        100. * float(torch.sum(param == 0))/ float(param.nelement())
-                  ))
+        else:
+            # Se il layer non ha figli, controllare se ha parametri 'weight'
+            if hasattr(layer, 'weight'):
+                weight = getattr(layer, 'weight')
+                if weight is not None:
+                    sparsity = 100. * float(torch.sum(weight == 0)) / float(weight.nelement())
+                    print("Sparsity in {}: {:.2f}%".format(layer.__class__.__name__, sparsity))
+            # Se il layer non ha parametri 'weight', ignorarlo
 check_sparsity(model)
 
-print(
-    "Global sparsity: {:.2f}%".format(
-        100. * float(
-            torch.sum(model.conv1.weight == 0)
-            + torch.sum(model.conv2.weight == 0)
-            + torch.sum(model.fc1.weight == 0)
-            + torch.sum(model.fc2.weight == 0)
-            + torch.sum(model.fc3.weight == 0)
-        )
-        / float(
-            model.conv1.weight.nelement()
-            + model.conv2.weight.nelement()
-            + model.fc1.weight.nelement()
-            + model.fc2.weight.nelement()
-            + model.fc3.weight.nelement()
-        )
-    )
-)
 
+#checking global sparsity
+def check_global_sparsity(model):
+    total_zeros = 0
+    total_elements = 0
+
+    # Iterare su tutti i moduli della rete
+    for module_name, module in model.named_modules():
+        # Verificare se il modulo ha parametri 'weight'
+        if hasattr(module, 'weight'):
+            weight = getattr(module, 'weight')
+            if weight is not None:
+                # Aggiungere il numero di zeri nei pesi del modulo alla somma totale
+                total_zeros += torch.sum(weight == 0).item()
+                # Aggiungere il numero totale di elementi nei pesi del modulo alla somma totale
+                total_elements += weight.nelement()
+
+    # Calcolare la scarsità globale
+    global_sparsity = 100. * float(total_zeros) / float(total_elements)
+
+    print("Global sparsity: {:.2f}%".format(global_sparsity))
+  
+
+# Utilizzare la funzione per calcolare la scarsità globale
+check_global_sparsity(model)
+
+## POST PRUNING
+def remove_pruned_weight(module):
+    for layer in module.children():
+        if list(layer.children()):
+            remove_pruned_weight(layer)
+        else:
+            if hasattr(layer, 'weight'):
+              print('Weight to remove: ', layer.weight)
+              prune.remove(layer, 'weight')
+              print('Removed ', list(layer.named_parameters()))
+remove_pruned_weight(model)
+
+
+### LOCAL PRUNING ###
+"""
 module = model.encoder.output_conv
 #unpruned model parameters
 print(list(module.named_parameters()))
