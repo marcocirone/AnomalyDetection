@@ -90,13 +90,16 @@ def main(args, calibrate=True):
         os.makedirs(savedir)
     model = Net(20)
     model = load_my_state_dict(model, torch.load(f"../trained_models/{args.model}_pretrained.pth", map_location=torch.device('cpu')))
+    flops = profile_macs(model, torch.randn(1, 3, 512, 1024))
+    print(f"FLOPS initial model: {flops / 10**9:.2f} GFLOPS")
     total_params = sum(p.numel() for p in model.parameters() if torch.any(p != 0))
     print(total_params)
+
     if args.cuda:
         model = torch.nn.DataParallel(model).cuda()
     qmodel = quantize_model(model, args, calibrate)
     if calibrate:
-        torch.save(qmodel.state_dict(), "./quantized_model1.pth")
+        torch.save(qmodel.state_dict(), savedir)
     return qmodel
 
 if __name__=="__main__":
