@@ -20,6 +20,8 @@ from torchvision.transforms import ToTensor, ToPILImage
 
 from dataset import cityscapes
 from erfnet import ERFNet
+from erfnet_quantized import Net
+from train.quantization import quantize_model, load_quant_dict
 from transform import Relabel, ToLabel, Colorize
 from iouEval import iouEval, getColorEntry
 
@@ -45,7 +47,11 @@ def main(args):
     print ("Loading model: " + modelpath)
     print ("Loading weights: " + weightspath)
 
-    model = ERFNet(NUM_CLASSES)
+    if args.loadModel == 'erfnet.py':
+        model = ERFNet(NUM_CLASSES)
+    elif args.loadModel == 'quantized_erfnet.py':
+        model = Net(NUM_CLASSES)
+        model = quantize_model(model, args, False)
 
     #model = torch.nn.DataParallel(model)
     if (not args.cpu):
@@ -63,8 +69,10 @@ def main(args):
             else:
                 own_state[name].copy_(param)
         return model
-
-    model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
+    if args.loadModel == 'erfnet.py':
+        model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
+    elif args.loadModel == 'quantized_erfnet.py':
+        model = load_quant_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
     print ("Model and weights LOADED successfully")
 
 
