@@ -57,8 +57,8 @@ def quantize_model(model, args, calibrate): #datadir should be the path to the c
     m = deepcopy(model)
     example_input = torch.randn(1, 20, 512, 1024)
     my_qconfig = torch.ao.quantization.QConfig(
-        weight = observer.MinMaxObserver.with_args(dtype=torch.int16, qscheme=torch.per_tensor_affine),
-        activation = observer.MinMaxObserver.with_args(dtype = torch.int16, qscheme=torch.per_tensor_affine)
+        weight = observer.MinMaxObserver.with_args(dtype=torch.qint8, qscheme=torch.per_tensor_affine),
+        activation = observer.MinMaxObserver.with_args(dtype = torch.qint8, qscheme=torch.per_tensor_affine)
     )
     # qconfig = get_default_qconfig(backend)
     qconfig_mapping = QConfigMapping().set_global(my_qconfig)
@@ -85,7 +85,7 @@ def quantize_model(model, args, calibrate): #datadir should be the path to the c
     return model_quantized
 
 def main(args, calibrate=True):
-    savedir = f"{args.savedir}/{args.model}_quantized"
+    savedir = f"{args.savedir}/quantized_model.pth"
     if not os.path.exists(savedir):
         os.makedirs(savedir)
     model = Net(20)
@@ -100,8 +100,7 @@ def main(args, calibrate=True):
     if not args.cpu:
         model = torch.nn.DataParallel(model).cuda()
     qmodel = quantize_model(model, args, calibrate)
-    if calibrate:
-        torch.save(qmodel.state_dict(), savedir)
+    torch.save(qmodel.state_dict(), "./quantized_model.pth")
     return qmodel
 
 if __name__=="__main__":
@@ -118,8 +117,8 @@ if __name__=="__main__":
     model = main(args, calibrate=False)  # first execution initializes the model
     total_params = sum(p.numel() for p in model.parameters() if torch.any(p != 0))
     print(f"Total Params: {total_params}")  
-    if not args.resume:  #second execution (if needed) calibrates the model
-        main(parser.parse_args(), calibrate=True)
+    # if not args.resume:  #second execution (if needed) calibrates the model
+    #     main(parser.parse_args(), calibrate=True)
 
     dict = torch.load("quantized_model.pth", map_location=lambda storage, loc: storage)
     # model = load_quant_dict(model, dict)
