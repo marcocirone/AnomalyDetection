@@ -55,18 +55,17 @@ def quantize_model2(model, args):
 
 def quantize_model(model, args, calibrate): #datadir should be the path to the cityscapes validation dataset
     m = deepcopy(model)
-    example_input = torch.randn(1, 20, 512, 1024)
-    my_qconfig = torch.ao.quantization.QConfig(
-        weight = observer.MinMaxObserver.with_args(dtype=torch.qint8, qscheme=torch.per_tensor_affine),
-        activation = observer.MinMaxObserver.with_args(dtype = torch.qint8, qscheme=torch.per_tensor_affine)
-    )
-    # qconfig = get_default_qconfig(backend)
-    qconfig_mapping = QConfigMapping().set_global(my_qconfig)
+    example_input = torch.randn(6, 20, 512, 1024)
+    # my_qconfig = torch.ao.quantization.QConfig(
+    #     weight = observer.MinMaxObserver.with_args(dtype=torch.qint8, qscheme=torch.per_tensor_affine),
+    #     activation = observer.MinMaxObserver.with_args(dtype = torch.qint8, qscheme=torch.per_tensor_affine)
+    # )
+    # # qconfig = get_default_qconfig(backend)
+    # qconfig_mapping = QConfigMapping().set_global(my_qconfig)
     if not args.cpu:
         example_input = example_input.cuda()
-        for key, value in qconfig_mapping.items():
-            qconfig_mapping[key] = value.cuda()
-    model_prepared = quantize_fx.prepare_fx(m.eval(), qconfig_mapping, example_input)
+    qconfig_dict = {"": torch.ao.quantization.qconfig.default_dynamic_qconfig} 
+    model_prepared = quantize_fx.prepare_fx(m.eval(), qconfig_dict, example_input)
     # model_quantized = quantization.quantize_static(model, weight_precision=16)
     if calibrate:
         co_transform_val = MyCoTransform(False, augment=False, height=512)
@@ -90,8 +89,8 @@ def main(args, calibrate=True):
         os.makedirs(savedir)
     model = Net(20)
     model = load_my_state_dict(model, torch.load(f"../trained_models/{args.model}_pretrained.pth", map_location=torch.device('cpu')))
-    for name, _  in model.state_dict().items():
-        print(name)
+    # for name, _  in model.state_dict().items():
+    #     print(name)
     flops = profile_macs(model, torch.randn(1, 3, 512, 1024))
     print(f"FLOPS initial model: {flops / 10**9:.2f} GFLOPS")
     total_params = sum(p.numel() for p in model.parameters() if torch.any(p != 0))
