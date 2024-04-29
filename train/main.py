@@ -9,9 +9,10 @@ import time
 import numpy as np
 import torch
 import math
-
+from torchprofile import profile_macs
 from PIL import Image, ImageOps
 from argparse import ArgumentParser
+import zipfile
 
 import torch.nn as nn
 from torch.optim import SGD, Adam, lr_scheduler
@@ -19,11 +20,11 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, CenterCrop, Normalize, Resize, Pad
 from torchvision.transforms import ToTensor, ToPILImage, transforms
-
+from erfnet_pruned import prune_and_return_model, remove_pruned_weights
 from dataset import VOC12,cityscapes
 from transform import Relabel, ToLabel, Colorize
 from visualize import Dashboard
-
+from torchsummary import summary
 import importlib
 from iouEval import iouEval, getColorEntry
 
@@ -86,6 +87,11 @@ class CrossEntropyLoss2d(torch.nn.Module):
 
     def forward(self, outputs, targets):
         return self.loss(torch.nn.functional.log_softmax(outputs, dim=1), targets)
+
+def zip_model(input_file, output_file):
+    with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.write(input_file)
+
 
 def train(args, model, enc=False):
     best_acc = 0
@@ -545,7 +551,52 @@ def main(args):
                     own_state[name].copy_(param)
             return model
         model = load_my_state_dict(model, torch.load("/content/AnomalyDetection/trained_models/erfnet_pretrained.pth", map_location=lambda storage, loc: storage))
-    model = train(args, model, False)   #Train decoder
+    
+    
+    print("Before train: args.pruned =", args.pruned)
+    new_mod = prune_and_return_model(model, 0.7)
+    model = train(args, new_mod, False)   #Train decoder
+    print("Decoder training completed.")
+    # Esegui il pruning
+    remove_pruned_weights(model)
+    print("Pruning completed.")
+    file2 = open("pruned.txt", "a")
+    for name,  params in model.state_dict().items():
+        file2.write(f"{name}: {params}\n")
+    input = torch.randn(1, 3, 512, 1024)
+    print(input.shape)
+    summary(model, input_size=(3, 512, 1024))
+    # for p in model.parameters():
+    #     print(p)
+    flops = profile_macs(model, input)
+    print(f"FLOPS: {flops / 10**9:.2f} GFLOPS")
+    # Salva il modello dopo il pruning
+    torch.save(model, "model_after_pruning.pth")
+    print("Model saved after pruning.")
+      # Zippa il modello dopo il pruning
+    zip_model("model_after_pruning.pth", "model_after_pruning.zip")
+    print("Model zipped after pruning.")
+      # Calcolo delle dimensioni del modello zippato prima e dopo il pruning
+    size_before_pruning = os.path.getsize("model_before_pruning.zip")
+    size_after_pruning = os.path.getsize("model_after_pruning.zip")
+      
+      # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
+    print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
+    print("Zipped model size after pruning:", size_after_pruning / (1024 * 1024), "MB")
+    
+    
+    """
+    print("After train: args.pruned =", args.pruned)
+    if args.pruned == True:
+      remove_pruned_weights(model)
+      # Salvataggio del modello pruned
+      torch.save(model, "model_after_pruning.pth")
+      # Zippare il modello pruned
+      zip_model("model_after_pruning.pth", "model_after_pruning.zip")
+    
+      #remove_and_save(model)
+      """
+      
     print("========== TRAINING FINISHED ===========")
 
 if __name__ == '__main__':
@@ -567,7 +618,7 @@ if __name__ == '__main__':
     parser.add_argument('--decoder', action='store_true')
     parser.add_argument('--pretrainedEncoder') #, default="../trained_models/erfnet_encoder_pretrained.pth.tar")
     parser.add_argument('--visualize', action='store_true')
-
+    parser.add_argument('--pruned', default = False)
     parser.add_argument('--iouTrain', action='store_true', default=False) #recommended: False (takes more time to train otherwise)
     parser.add_argument('--iouVal', action='store_true', default=True)  
     parser.add_argument('--resume', action='store_true')    #Use this flag to load last checkpoint for training  

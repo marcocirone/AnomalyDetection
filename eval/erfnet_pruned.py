@@ -139,7 +139,7 @@ class Decoder (nn.Module):
         return output
 
 
-class ERFNet(nn.Module):
+class Net(nn.Module):
     def __init__(self, num_classes, encoder=None):  #use encoder to pass pretrained encoder
         super().__init__()
 
@@ -158,7 +158,7 @@ class ERFNet(nn.Module):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = ERFNet(20).to(device = device)
+model = Net(20).to(device = device)
 
 """
 PRINT NUMERO TOTALE DI PARAMETRI PRE PRUNING
@@ -187,13 +187,13 @@ def get_parameters_to_prune(module):
         else:
             for name, param in layer.named_parameters():
               #print(name)
-              if 'weight' in name:
+              if 'weight' in name or 'bias' in name:
                   #print(name)
                   parameters_to_prune.append((layer, name))
     return parameters_to_prune
                     
 
-parameters_to_prune = get_parameters_to_prune(model)
+#parameters_to_prune = get_parameters_to_prune(model)
 #print(len(parameters_to_prune))
 """
 def count_layers_with_weights(module):
@@ -213,14 +213,14 @@ num_decoder_layers_with_weights = count_layers_with_weights(model.decoder)
 
 print("Numero di layer nell'encoder + decoder: ", num_encoder_layers_with_weights + num_decoder_layers_with_weights)
 """
-
+"""
 ## GLOBAL PRUNING
 prune.global_unstructured(
     parameters_to_prune,
     pruning_method=prune.L1Unstructured,
     amount=0.3,
 )
-
+"""
 #checking sparsity for every layer
 def check_sparsity(module):
     for layer in module.children():
@@ -281,7 +281,7 @@ def count_and_print_weight(module):
 
     return total_params, non_zero_params_total
 
-tot, nonzero = count_and_print_weight(model) 
+#tot, nonzero = count_and_print_weight(model) 
 #print("Total parameters: ", tot,"\nNon zero parameters: ", nonzero)
 
 ## POST PRUNING
@@ -298,9 +298,9 @@ def remove_pruned_weights(module):
                 #print(layer.weight)
                 
 
-remove_pruned_weights(model)
+#remove_pruned_weights(model)
 #summary(model, (3, 512, 1024))
-
+"""
 torch.save(model, "model_after_pruning.pth")
 zip_model("model_after_pruning.pth", "model_after_pruning.zip")
 
@@ -311,7 +311,52 @@ size_after_pruning = os.path.getsize("model_after_pruning.zip")
 
 print("Zipped model size before pruning:", size_before_pruning/(1024*1024), "MB")
 print("Zipper model size after pruning:", size_after_pruning/(1024*1024), "MB")
+"""
+def prune_and_return_model(model, pruning_amount):
+    # Pruning
+    parameters_to_prune = get_parameters_to_prune(model)
+    prune.global_unstructured(
+        parameters_to_prune,
+        pruning_method=prune.L1Unstructured,
+        amount=pruning_amount,
+    )
 
+
+    tot, nonzero = count_and_print_weight(model) 
+    print("Total parameters: ", tot,"\nNon zero parameters: ", nonzero)
+    #Rimozione dei pesi pruned
+    #remove_pruned_weights(model)
+
+    # Salvataggio del modello pruned
+    #torch.save(model, "model_after_pruning.pth")
+
+    # Zippare il modello pruned
+    #zip_model("model_after_pruning.pth", "model_after_pruning.zip")
+
+
+    """
+    # Calcolo delle dimensioni del modello zippato prima e dopo il pruning
+    size_before_pruning = os.path.getsize("model_before_pruning.zip")
+    size_after_pruning = os.path.getsize("model_after_pruning.zip")
+
+    # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
+    print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
+    print("Zipped model size after pruning:", size_after_pruning / (1024 * 1024), "MB")
+    """
+    return model
+
+def remove_and_save(model):
+  #Rimozione dei pesi pruned
+    remove_pruned_weights(model)
+
+    # Salvataggio del modello pruned
+    torch.save(model, "model_after_pruning.pth")
+
+    # Zippare il modello pruned
+    zip_model("model_after_pruning.pth", "model_after_pruning.zip")
+    return model
+
+#new_mod = prune_and_return_model(model, 0.3)
 """
 ### LOCAL PRUNING ###
 
