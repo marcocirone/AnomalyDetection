@@ -14,6 +14,7 @@ from enet import ENet
 from bisenet import BiSeNet
 from PIL import Image
 from argparse import ArgumentParser
+from erfnet_pruned import prune_and_return_model
 
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -58,18 +59,24 @@ def load_my_state_dict(model, state_dict, model_name):  #custom function to load
 def main(args):
 
     
+
     modelpath = args.loadDir + args.loadModel
     weightspath = args.loadDir + args.loadWeights
 
     print ("Loading model: " + modelpath)
     print ("Loading weights: " + weightspath)
-
+    
     if(args.model == 'ENet'):
         model = ENet(NUM_CLASSES)
     elif(args.model == 'BiSeNet'):
         model = BiSeNet(NUM_CLASSES)
     else:
         model = ERFNet(NUM_CLASSES)
+    if args.pruned == True:
+      print("in loop")
+      model = prune_and_return_model(model, 0.7)
+      print("prunato baby")
+    print(args.pruned)
 
     #model = torch.nn.DataParallel(model)
     if (not args.cpu):
@@ -136,7 +143,10 @@ def main(args):
         open('voidIoUResults.txt', 'w').close()
     with open('voidIoUResults.txt', 'a') as f:
         print("---------------------------------------", file=f)
-        print("Model", args.model, "Took", time.time() - start, "seconds", file=f)
+        if args.pruned:
+          print("Model", args.model, "with pruning", "Took", time.time() - start, "seconds", file=f)
+        else:
+          print("Model", args.model, "no pruning ", "Took", time.time() - start, "seconds", file=f)
         print("=======================================", file=f)
         # print("TOTAL IOU: ", iou * 100, "%", file=f)
         print("Per-Class IoU:", file=f)
@@ -180,4 +190,5 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--method', default='msp')
     parser.add_argument('--model', default = 'ENet')
+    parser.add_argument('--pruned', action = 'store_true')
     main(parser.parse_args())

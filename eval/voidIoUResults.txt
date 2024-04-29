@@ -73,3 +73,28 @@ Per-Class IoU:
 24.28 bicycle
 =======================================
 MEAN IoU:  35.40 %
+---------------------------------------
+Model ERFNet with pruning Took 110.10244059562683 seconds
+=======================================
+Per-Class IoU:
+95.09 Road
+67.61 sidewalk
+81.24 building
+27.14 wall
+27.18 fence
+46.14 pole
+45.78 traffic light
+52.08 traffic sign
+83.67 vegetation
+54.54 terrain
+78.23 sky
+57.68 person
+28.58 rider
+70.26 car
+37.95 truck
+54.99 bus
+16.58 train
+14.29 motorcycle
+59.06 bicycle
+=======================================
+MEAN IoU:  52.53 %
