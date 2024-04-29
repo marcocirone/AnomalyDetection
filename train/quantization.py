@@ -25,7 +25,7 @@ def calibrate(model, data_load):
         for step, (images, _) in enumerate(loader_val ):
             print(f"step {step + 1}")
             print(images.shape)
-            if args.cuda:
+            if not args.cpu:
                 images = images.cuda()
             images = Variable(images)
             model(images)
@@ -62,7 +62,7 @@ def quantize_model(model, args, calibrate): #datadir should be the path to the c
     )
     # qconfig = get_default_qconfig(backend)
     qconfig_mapping = QConfigMapping().set_global(my_qconfig)
-    if args.cuda:
+    if not args.cpu:
         example_input = example_input.cuda()
         for key, value in qconfig_mapping.items():
             qconfig_mapping[key] = value.cuda()
@@ -77,7 +77,7 @@ def quantize_model(model, args, calibrate): #datadir should be the path to the c
             for step, (images, _) in enumerate(loader_val ):
                 print(f"step {step + 1}")
                 print(images.shape)
-                if args.cuda:
+                if not args.cpu:
                     images = images.cuda()
                 images = Variable(images)
                 model_prepared(images)
@@ -90,12 +90,14 @@ def main(args, calibrate=True):
         os.makedirs(savedir)
     model = Net(20)
     model = load_my_state_dict(model, torch.load(f"../trained_models/{args.model}_pretrained.pth", map_location=torch.device('cpu')))
+    for name, _  in model.state_dict().items():
+        print(name)
     flops = profile_macs(model, torch.randn(1, 3, 512, 1024))
     print(f"FLOPS initial model: {flops / 10**9:.2f} GFLOPS")
     total_params = sum(p.numel() for p in model.parameters() if torch.any(p != 0))
     print(total_params)
 
-    if args.cuda:
+    if not args.cpu:
         model = torch.nn.DataParallel(model).cuda()
     qmodel = quantize_model(model, args, calibrate)
     if calibrate:
@@ -104,7 +106,7 @@ def main(args, calibrate=True):
 
 if __name__=="__main__":
     parser = ArgumentParser()
-    parser.add_argument('--cuda', action='store_true')
+    parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--model', default='erfnet')
     parser.add_argument('--batch-size', type=int, default=6)
     parser.add_argument('--savedir', default="/content/Drive/MyDrive/save")

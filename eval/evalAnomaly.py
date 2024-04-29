@@ -7,6 +7,8 @@ import random
 from PIL import Image
 import numpy as np
 from erfnet import ERFNet
+from erfnet_quantized import Net
+from train.quantization import quantize_model, load_quant_dict
 import os.path as osp
 from argparse import ArgumentParser
 from ood_metrics import fpr_at_95_tpr, calc_metrics, plot_roc, plot_pr,plot_barcode
@@ -58,7 +60,11 @@ def main():
     print ("Loading model: " + modelpath)
     print ("Loading weights: " + weightspath)
 
-    model = ERFNet(NUM_CLASSES)
+    if args.loadModel == 'erfnet.py':
+        model = ERFNet(NUM_CLASSES)
+    elif args.loadMmodel == 'quantized_erfnet.py':
+        model = Net(NUM_CLASSES)
+        model = quantize_model(model, args, False)
 
     if (not args.cpu):
         model = torch.nn.DataParallel(model).cuda()
@@ -75,8 +81,10 @@ def main():
             else:
                 own_state[name].copy_(param)
         return model
-
-    model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
+    if args.loadModel == 'erfnet.py':
+        model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
+    elif args.loadModel == 'quantized_erfnet.py':
+        model = load_quant_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
     print ("Model and weights LOADED successfully")
     model.eval()
     
