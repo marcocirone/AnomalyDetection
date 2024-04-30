@@ -160,13 +160,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = Net(20).to(device = device)
 
-"""
-PRINT NUMERO TOTALE DI PARAMETRI PRE PRUNING
-total_params = sum(p.numel() for p in model.parameters())
-print("Numero totale di parametri nel modello:", total_params)
-
-summary(model, (3, 512, 1024))
-"""
 def zip_model(input_file, output_file):
     with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write(input_file)
@@ -220,7 +213,7 @@ prune.global_unstructured(
     pruning_method=prune.L1Unstructured,
     amount=0.3,
 )
-"""
+
 #checking sparsity for every layer
 def check_sparsity(module):
     for layer in module.children():
@@ -257,10 +250,8 @@ def check_global_sparsity(model):
     print("Global sparsity: {:.2f}%".format(global_sparsity))
   
 #check_global_sparsity(model)
-#summary(new_mod, (3, 512, 1024))
-#total_params = sum(p.numel() for p in new_mod.parameters())
-#print("Numero totale di parametri nel modello:", total_params)
-## TOTAL AND NON ZERO PARAMETERS AFTER PRUNING
+"""
+
 def count_and_print_weight(module):
     total_params = 0
     non_zero_params_total = 0
@@ -281,8 +272,6 @@ def count_and_print_weight(module):
 
     return total_params, non_zero_params_total
 
-#tot, nonzero = count_and_print_weight(model) 
-#print("Total parameters: ", tot,"\nNon zero parameters: ", nonzero)
 
 ## POST PRUNING
 
@@ -298,8 +287,6 @@ def remove_pruned_weights(module):
                 #print(layer.weight)
                 
 
-#remove_pruned_weights(model)
-#summary(model, (3, 512, 1024))
 """
 torch.save(model, "model_after_pruning.pth")
 zip_model("model_after_pruning.pth", "model_after_pruning.zip")
@@ -312,6 +299,7 @@ size_after_pruning = os.path.getsize("model_after_pruning.zip")
 print("Zipped model size before pruning:", size_before_pruning/(1024*1024), "MB")
 print("Zipper model size after pruning:", size_after_pruning/(1024*1024), "MB")
 """
+## GLOBAL PRUNING
 def prune_and_return_model(model, pruning_amount):
     # Pruning
     parameters_to_prune = get_parameters_to_prune(model)
@@ -321,28 +309,9 @@ def prune_and_return_model(model, pruning_amount):
         amount=pruning_amount,
     )
 
-
     tot, nonzero = count_and_print_weight(model) 
     print("Total parameters: ", tot,"\nNon zero parameters: ", nonzero)
-    #Rimozione dei pesi pruned
-    #remove_pruned_weights(model)
-
-    # Salvataggio del modello pruned
-    #torch.save(model, "model_after_pruning.pth")
-
-    # Zippare il modello pruned
-    #zip_model("model_after_pruning.pth", "model_after_pruning.zip")
-
-
-    """
-    # Calcolo delle dimensioni del modello zippato prima e dopo il pruning
-    size_before_pruning = os.path.getsize("model_before_pruning.zip")
-    size_after_pruning = os.path.getsize("model_after_pruning.zip")
-
-    # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
-    print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
-    print("Zipped model size after pruning:", size_after_pruning / (1024 * 1024), "MB")
-    """
+    
     return model
 
 def remove_and_save(model):
@@ -356,10 +325,64 @@ def remove_and_save(model):
     zip_model("model_after_pruning.pth", "model_after_pruning.zip")
     return model
 
-#new_mod = prune_and_return_model(model, 0.3)
-"""
+
 ### LOCAL PRUNING ###
 
+
+def get_parameters_to_prune_local(module):
+    parameters_to_prune = []
+    for layer in module.children():
+        if list(layer.children()):
+            parameters_to_prune.extend(get_parameters_to_prune_local(layer))
+        elif isinstance(layer, nn.Conv2d) or isinstance(layer, nn.ConvTranspose2d):
+            for name, param in layer.named_parameters():
+              #print(name)
+              if 'weight' in name or 'encoder' in name:
+                  #print(name)
+                  parameters_to_prune.append((layer, name))
+    return parameters_to_prune
+                    
+
+## POST PRUNING
+
+def remove_pruned_weights_local(module):
+    trainable_params = []
+    for layer in module.children():
+        if list(layer.children()):
+            remove_pruned_weights_local(layer)
+        else:
+            if isinstance(layer, nn.Conv2d) or isinstance(layer, nn.ConvTranspose2d):
+              for name, param in layer.named_parameters():
+              #print(name)
+                if 'weight' in name or 'encoder' in name:
+                  prune.remove(layer, 'weight')  # Rimuovi completamente i pesi prunati
+                  #print("rimosso")
+                  #print(layer.weight)
+
+#tot, nonzero = count_and_print_weight(model) 
+#print("Total parameters: ", tot,"\nNon zero parameters: ", nonzero)
+
+def local_prune_and_return_model(model, pruning_amount):
+    # Pruning
+    parameters_to_prune = get_parameters_to_prune_local(model)
+    prune.global_unstructured(
+        parameters_to_prune,
+        pruning_method=prune.L1Unstructured,
+        amount=pruning_amount,
+    )
+
+
+    tot, nonzero = count_and_print_weight(model) 
+    print("Total parameters: ", tot,"\nNon zero parameters: ", nonzero)
+    return model
+    
+def remove_and_save_local(model):
+    remove_pruned_weights_local(model)
+    torch.save(model, "model_after_pruning_local.pth")
+    zip_model("model_after_pruning_local.pth", "model_after_pruning_local.zip")
+    return model
+
+"""
 module = model.encoder.output_conv
 #unpruned model parameters
 print(list(module.named_parameters()))

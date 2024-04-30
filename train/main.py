@@ -20,7 +20,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, CenterCrop, Normalize, Resize, Pad
 from torchvision.transforms import ToTensor, ToPILImage, transforms
-from erfnet_pruned import prune_and_return_model, remove_pruned_weights
+from erfnet_pruned import prune_and_return_model, remove_pruned_weights, local_prune_and_return_model, remove_and_save_local
 from dataset import VOC12,cityscapes
 from transform import Relabel, ToLabel, Colorize
 from visualize import Dashboard
@@ -552,8 +552,8 @@ def main(args):
             return model
         model = load_my_state_dict(model, torch.load("/content/AnomalyDetection/trained_models/erfnet_pretrained.pth", map_location=lambda storage, loc: storage))
     
-    if args.pruned == True:
-      print("Before train: args.pruned =", args.pruned)
+    if args.pruned == True and args.pruning == "global":
+      #print("Before train: args.pruned =", args.pruned)
       new_mod = prune_and_return_model(model, 0.7)
       model = train(args, new_mod, False)   #Train decoder
       print("Decoder training completed.")
@@ -583,6 +583,29 @@ def main(args):
         # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
       print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
       print("Zipped model size after pruning:", size_after_pruning / (1024 * 1024), "MB")
+    
+    elif args.pruned == True and args.pruning == "local":
+      #print("Before train: args.pruned =", args.pruned)
+      new_mod = local_prune_and_return_model(model, 0.7)
+      model = train(args, new_mod, False)   #Train decoder
+      print("Decoder training completed.")
+      # Esegui il pruning
+      new_mod = remove_and_save_local(model)
+      print("Pruning completed.")
+      file2 = open("pruned.txt", "a")
+      for name,  params in model.state_dict().items():
+          file2.write (f"{name}: {params}\n")
+      input = torch.randn(1, 3, 512, 1024)
+      print(input.shape)
+      summary(model, input_size=(3, 512, 1024))
+      flops = profile_macs(model, input)
+      print(f"FLOPS: {flops / 10**9:.2f} GFLOPS")
+      size_before_pruning = os.path.getsize("model_before_pruning.zip")
+      size_after_pruning_local = os.path.getsize("model_after_pruning_local.zip")
+        
+        # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
+      print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
+      print("Zipped model size after pruning:", size_after_pruning_local / (1024 * 1024), "MB")
     else:
       model = train(args, model, False)   #Train decoder
     
@@ -623,5 +646,5 @@ if __name__ == '__main__':
     parser.add_argument('--iouTrain', action='store_true', default=False) #recommended: False (takes more time to train otherwise)
     parser.add_argument('--iouVal', action='store_true', default=True)  
     parser.add_argument('--resume', action='store_true')    #Use this flag to load last checkpoint for training  
-
+    parser.add_argument('--pruning', default = "global")
     main(parser.parse_args())

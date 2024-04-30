@@ -1,5 +1,5 @@
 ---------------------------------------
-Model ENet Took 133.7105278968811 seconds
+Model ENet without pruning Took 133.7105278968811 seconds
 =======================================
 Per-Class IoU:
 57.27 Road
@@ -24,7 +24,7 @@ Per-Class IoU:
 =======================================
 MEAN IoU:  3.70 %
 ---------------------------------------
-Model ERFNet Took 93.52724885940552 seconds
+Model ERFNet without pruning Took 93.52724885940552 seconds
 =======================================
 Per-Class IoU:
 94.24 Road
@@ -49,7 +49,7 @@ Per-Class IoU:
 =======================================
 MEAN IoU:  49.19 %
 ---------------------------------------
-Model BiSeNet Took 93.0472719669342 seconds
+Model BiSeNet without pruning Took 93.0472719669342 seconds
 =======================================
 Per-Class IoU:
 85.58 Road
@@ -74,7 +74,7 @@ Per-Class IoU:
 =======================================
 MEAN IoU:  35.40 %
 ---------------------------------------
-Model ERFNet with pruning Took 110.10244059562683 seconds
+Model ERFNet with global pruning Took 110.10244059562683 seconds
 =======================================
 Per-Class IoU:
 95.09 Road
@@ -97,4 +97,28 @@ Per-Class IoU:
 14.29 motorcycle
 59.06 bicycle
 =======================================
-MEAN IoU:  52.53 %
+MEAN IoU:  52.53 %---------------------------------------
+Model ERFNet with local pruning  Took 94.61075639724731 seconds
+=======================================
+Per-Class IoU:
+94.86 Road
+66.92 sidewalk
+80.04 building
+24.38 wall
+25.08 fence
+46.73 pole
+46.94 traffic light
+50.52 traffic sign
+81.19 vegetation
+54.02 terrain
+81.56 sky
+48.28 person
+26.79 rider
+66.46 car
+36.82 truck
+46.56 bus
+19.30 train
+17.03 motorcycle
+58.36 bicycle
+=======================================
+MEAN IoU:  51.15 %

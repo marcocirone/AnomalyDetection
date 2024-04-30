@@ -14,7 +14,7 @@ from enet import ENet
 from bisenet import BiSeNet
 from PIL import Image
 from argparse import ArgumentParser
-from erfnet_pruned import prune_and_return_model
+from erfnet_pruned import prune_and_return_model, local_prune_and_return_model
 
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -72,11 +72,11 @@ def main(args):
         model = BiSeNet(NUM_CLASSES)
     else:
         model = ERFNet(NUM_CLASSES)
-    if args.pruned == True:
-      print("in loop")
+    if args.pruned == True and args.pruning == 'global':
       model = prune_and_return_model(model, 0.7)
-      print("prunato baby")
-    print(args.pruned)
+    elif args.pruned == True and args.pruning == 'local':
+      model = local_prune_and_return_model(model, 0.7)
+    #print(args.pruned)
 
     #model = torch.nn.DataParallel(model)
     if (not args.cpu):
@@ -143,10 +143,12 @@ def main(args):
         open('voidIoUResults.txt', 'w').close()
     with open('voidIoUResults.txt', 'a') as f:
         print("---------------------------------------", file=f)
-        if args.pruned:
-          print("Model", args.model, "with pruning", "Took", time.time() - start, "seconds", file=f)
+        if args.pruned and args.pruning == 'global':
+          print("Model", args.model, "with global pruning", "Took", time.time() - start, "seconds", file=f)
+        elif args.pruned and args.pruning == 'local':
+          print("Model", args.model, "with local pruning ", "Took", time.time() - start, "seconds", file=f)
         else:
-          print("Model", args.model, "no pruning ", "Took", time.time() - start, "seconds", file=f)
+          print("Model", args.model, "without pruning ", "Took", time.time() - start, "seconds", file=f)
         print("=======================================", file=f)
         # print("TOTAL IOU: ", iou * 100, "%", file=f)
         print("Per-Class IoU:", file=f)
@@ -191,4 +193,5 @@ if __name__ == '__main__':
     parser.add_argument('--method', default='msp')
     parser.add_argument('--model', default = 'ENet')
     parser.add_argument('--pruned', action = 'store_true')
+    parser.add_argument('--pruning', default = 'global')
     main(parser.parse_args())
