@@ -15,6 +15,7 @@ from bisenet import BiSeNet
 from PIL import Image
 from argparse import ArgumentParser
 from erfnet_pruned import prune_and_return_model, local_prune_and_return_model
+from quantization import quantize_model
 
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -73,9 +74,9 @@ def main(args):
     else:
         model = ERFNet(NUM_CLASSES)
     if args.pruned == True and args.pruning == 'global':
-      model = prune_and_return_model(model, 0.7)
+        model = prune_and_return_model(model, 0.7)
     elif args.pruned == True and args.pruning == 'local':
-      model = local_prune_and_return_model(model, 0.7)
+        model = local_prune_and_return_model(model, 0.7)
     #print(args.pruned)
 
     #model = torch.nn.DataParallel(model)
@@ -93,6 +94,9 @@ def main(args):
         model = load_my_state_dict(model, state_dict, args.model)
     #print(model)
     print ("Model and weights LOADED successfully")
+
+    if args.quantize:
+        model = quantize_model(model, args, False)
 
     model.eval()
 

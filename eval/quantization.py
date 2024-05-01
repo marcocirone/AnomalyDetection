@@ -1,9 +1,10 @@
 import os
 import importlib
 from erfnet_quantized import Net
+from erfnet import ERFNet
 import torch
 from torch import nn
-from torch.ao.quantization import quantize_fx, QConfigMapping, observer
+from torch.ao.quantization import quantize_fx, QConfigMapping, observer, quantize_dynamic
 # import torch.ao.quantization as quantization
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
@@ -60,34 +61,35 @@ def quantize_model(model, args, calibrate): #datadir should be the path to the c
         activation = observer.MinMaxObserver.with_args(dtype = torch.qint8, qscheme=torch.per_tensor_affine)
     )
     # qconfig = get_default_qconfig(backend)
-    qconfig_mapping = QConfigMapping().set_global(my_qconfig)
-    if not args.cpu:
-        example_input = example_input.cuda()
-        for key, value in qconfig_mapping.items():
-            qconfig_mapping[key] = value.cuda()
-    model_prepared = quantize_fx.prepare_fx(m.eval(), qconfig_mapping, example_input)
+    # qconfig_mapping = QConfigMapping().set_global(my_qconfig)
+    # if not args.cpu:
+    #     example_input = example_input.cuda()
+    #     for key, value in qconfig_mapping.items():
+    #         qconfig_mapping[key] = value.cuda()
+    # model_prepared = quantize_fx.prepare_fx(m.eval(), qconfig_mapping, example_input)
+    model_quantized = quantize_dynamic(model, dtype=torch.float16)
     # model_quantized = quantization.quantize_static(model, weight_precision=16)
-    if calibrate:
-        co_transform_val = MyCoTransform(False, augment=False, height=512)
-        dataset_val = cityscapes(args.datadir, co_transform_val, 'val')
-        loader_val = DataLoader(dataset_val, num_workers=4, batch_size=args.batch_size, shuffle=False)
-        print(len(loader_val))
-        with torch.inference_mode():
-            for step, (images, _) in enumerate(loader_val ):
-                print(f"step {step + 1}")
-                print(images.shape)
-                if not args.cpu:
-                    images = images.cuda()
-                images = Variable(images)
-                model_prepared(images)
-    model_quantized = quantize_fx.convert_fx(model_prepared)
+    # if calibrate:
+    #     co_transform_val = MyCoTransform(False, augment=False, height=512)
+    #     dataset_val = cityscapes(args.datadir, co_transform_val, 'val')
+    #     loader_val = DataLoader(dataset_val, num_workers=4, batch_size=args.batch_size, shuffle=False)
+    #     print(len(loader_val))
+    #     with torch.inference_mode():
+    #         for step, (images, _) in enumerate(loader_val ):
+    #             print(f"step {step + 1}")
+    #             print(images.shape)
+    #             if not args.cpu:
+    #                 images = images.cuda()
+    #             images = Variable(images)
+    #             model_prepared(images)
+    # model_quantized = quantize_fx.convert_fx(model_prepared)
     return model_quantized
 
 def main(args, calibrate=True):
     savedir = f"{args.savedir}/quantized_model.pth"
     if not os.path.exists(savedir):
         os.makedirs(savedir)
-    model = Net(20)
+    model = ERFNet(20)
     model = load_my_state_dict(model, torch.load(f"../trained_models/{args.model}_pretrained.pth", map_location=torch.device('cpu')))
     for name, _  in model.state_dict().items():
         print(name)
