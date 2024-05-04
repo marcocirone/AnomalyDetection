@@ -9,13 +9,14 @@ import torch.nn.functional as F
 import os
 import importlib
 import time
+from erfnet_quantized import Net
 from erfnet import ERFNet
 from enet import ENet
 from bisenet import BiSeNet
 from PIL import Image
 from argparse import ArgumentParser
 from erfnet_pruned import prune_and_return_model, local_prune_and_return_model
-from quantization import quantize_model
+from quantization import quantize_model2
 
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -77,7 +78,10 @@ def main(args):
         model = prune_and_return_model(model, 0.7)
     elif args.pruned == True and args.pruning == 'local':
         model = local_prune_and_return_model(model, 0.7)
-    #print(args.pruned)
+    elif args.quantize:
+        model = Net(NUM_CLASSES)
+        model = quantize_model2(model, args, False)
+
 
     #model = torch.nn.DataParallel(model)
     if (not args.cpu):
@@ -90,13 +94,13 @@ def main(args):
         #print(state_dict)
         state_dict = {k if k.startswith("module.") else "module." + k: v for k, v in state_dict.items()}
         model.load_state_dict(state_dict)
+    elif (args.quantize):
+        model.load_state_dict()
     else:
         model = load_my_state_dict(model, state_dict, args.model)
     #print(model)
     print ("Model and weights LOADED successfully")
 
-    if args.quantize:
-        model = quantize_model(model, args, False)
 
     model.eval()
 
@@ -151,6 +155,8 @@ def main(args):
           print("Model", args.model, "with global pruning", "Took", time.time() - start, "seconds", file=f)
         elif args.pruned and args.pruning == 'local':
           print("Model", args.model, "with local pruning ", "Took", time.time() - start, "seconds", file=f)
+        elif args.quantize:
+            print("Model", args.model, " with quantization ", "Took", time.time() - start, "seconds", file=f)
         else:
           print("Model", args.model, "without pruning ", "Took", time.time() - start, "seconds", file=f)
         print("=======================================", file=f)

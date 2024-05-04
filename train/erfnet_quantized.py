@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
+from torch.ao.quantization import QuantStub, DeQuantStub
 
 class DownsamplerBlock (nn.Module):
     def __init__(self, ninput, noutput):
@@ -39,7 +40,9 @@ class non_bottleneck_1d (nn.Module):
         self.bn2 = nn.BatchNorm2d(chann, eps=1e-03)
 
         self.dropout = nn.Dropout2d(dropprob)
-        
+
+        self.skip_add = nn.quantized.FloatFunctional()
+
 
     def forward(self, input):
 
@@ -57,7 +60,9 @@ class non_bottleneck_1d (nn.Module):
         if (self.dropout.p != 0):
             output = self.dropout(output)
         
-        return F.relu(output+input)    #+input = identity (residual connection)
+        # print(f"out shape: {output.shape}")
+        # print(f"in shape: {input.shape}")
+        return F.relu(self.skip_add.add(output, input))    #+input = identity (residual connection)
 
 
 class Encoder(nn.Module):
@@ -142,7 +147,10 @@ class Net(nn.Module):
         else:
             self.encoder = encoder
         self.decoder = Decoder(num_classes)
+        self.quant = QuantStub()
+        self.dequant = DeQuantStub()
 
     def forward(self, input, only_encode=False):
-        output = self.encoder(input)    #predict=False by default
-        return self.decoder.forward(output)
+        output = self.quant(input)
+        output = self.encoder(output)    #predict=False by default
+        return self.dequant(self.decoder.forward(output))
