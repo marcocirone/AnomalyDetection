@@ -112,8 +112,7 @@ def main():
       print(temperature)
       for path in glob.glob(os.path.expanduser(str(args.input[0]))):
           print(path)
-          images = torch.from_numpy(np.array(Image.open(path).convert('RGB'))).unsqueeze(0).float()
-          images = images.permute(0,3,1,2)
+          images = input_transform((Image.open(path).convert('RGB'))).unsqueeze(0).float()
           with torch.no_grad():
               result = model(images)
           print(result)
@@ -137,6 +136,7 @@ def main():
             pathGT = pathGT.replace("jpg", "png")  
 
           mask = Image.open(pathGT)
+          mask = target_transform(mask)
           ood_gts = np.array(mask)
 
           if "RoadAnomaly" in pathGT:
