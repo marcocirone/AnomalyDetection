@@ -16,7 +16,7 @@ from bisenet import BiSeNet
 from PIL import Image
 from argparse import ArgumentParser
 from erfnet_pruned import prune_and_return_model, local_prune_and_return_model
-from quantization import quantize_model2
+from quantization import quantize_model
 
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -80,7 +80,8 @@ def main(args):
         model = local_prune_and_return_model(model, 0.7)
     elif args.quantize:
         model = Net(NUM_CLASSES)
-        model = quantize_model2(model, args, False)
+        model = quantize_model(model, args, False)
+        print("Model quantized")
 
 
     #model = torch.nn.DataParallel(model)
@@ -95,7 +96,9 @@ def main(args):
         state_dict = {k if k.startswith("module.") else "module." + k: v for k, v in state_dict.items()}
         model.load_state_dict(state_dict)
     elif (args.quantize):
-        model.load_state_dict()
+        print("Load nothing")
+        # model = load_quant_dict(model, state_dict)
+        model.load_state_dict(state_dict)
     else:
         model = load_my_state_dict(model, state_dict, args.model)
     #print(model)
@@ -115,15 +118,20 @@ def main(args):
 
     start = time.time()
 
+    print(len(loader))
+
     for step, (images, labels, filename, filenameGt) in enumerate(loader):
-        # print(step)
+        print(step)
         if (not args.cpu):
             images = images.cuda()
             labels = labels.cuda()
+        print(images.shape)
 
         inputs = Variable(images)
         with torch.no_grad():
             outputs = model(inputs)
+            print("Hello there?")
+        print("Obtained output")
 
         if(model == 'Enet'):
             outputs = torch.roll(outputs, -1, 1)
@@ -204,4 +212,5 @@ if __name__ == '__main__':
     parser.add_argument('--model', default = 'ENet')
     parser.add_argument('--pruned', action = 'store_true')
     parser.add_argument('--pruning', default = 'global')
+    parser.add_argument('--quantize', action = 'store_true')
     main(parser.parse_args())
