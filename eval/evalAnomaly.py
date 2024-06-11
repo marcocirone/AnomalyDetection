@@ -14,6 +14,7 @@ from torchvision.transforms import Compose, Resize, ToTensor
 from ood_metrics import fpr_at_95_tpr, calc_metrics, plot_roc, plot_pr,plot_barcode
 from sklearn.metrics import roc_auc_score, roc_curve, auc, precision_recall_curve, average_precision_score
 from matplotlib import pyplot as plt
+from quantization import quantize_model
 
 seed = 42
 
@@ -75,15 +76,6 @@ def main():
     print ("Loading model: " + modelpath)
     print ("Loading weights: " + weightspath)
 
-    if args.loadModel == 'erfnet.py':
-        model = ERFNet(NUM_CLASSES)
-    # elif args.loadMmodel == 'quantized_erfnet.py':
-    #     model = Net(NUM_CLASSES)
-    #     model = quantize_model(model, args, False)
-
-    if (not args.cpu):
-        model = torch.nn.DataParallel(model).cuda()
-
     def load_my_state_dict(model, state_dict):  #custom function to load model when not all dict elements
         own_state = model.state_dict()
         for name, param in state_dict.items():
@@ -96,6 +88,21 @@ def main():
             else:
                 own_state[name].copy_(param)
         return model
+
+    if args.loadModel == 'erfnet.py':
+        model = ERFNet(NUM_CLASSES)
+    elif args.loadModel == 'quantized_erfnet.py':
+        model = Net(NUM_CLASSES)
+        model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
+        model = quantize_model(model, args, True)
+        return
+        # with open("file1.txt", "a") as f:
+        #     for name, p in model.state_dict().items():
+        #         f.write(f"{name}: {p}")
+
+    if (not args.cpu):
+        model = torch.nn.DataParallel(model).cuda()
+
     if args.loadModel == 'erfnet.py':
         model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
     # elif args.loadModel == 'quantized_erfnet.py':
@@ -211,9 +218,7 @@ def main():
         #   images = images.permute(0,3,1,2)
           with torch.no_grad():
               result = model(images).squeeze(0)
-          print(result.shape)
           result = result[:-1]
-          print(result.shape)
           if args.method == "msp":
               temperature = float(args.temperature)
               softmax_probs = torch.nn.functional.softmax(result.squeeze(0)/temperature, dim=0)
@@ -229,6 +234,7 @@ def main():
               log_softmax_probs = torch.nn.functional.log_softmax(result.squeeze(0), dim=0)
               anomaly_result = torch.div(-torch.sum(softmax_probs * log_softmax_probs, dim=0),torch.log(torch.tensor(result.shape[1]))).data.cpu().numpy()
         #   anomaly_result = anomaly_result.data.cpu().numpy()
+        #   print(anomaly_result)
           pathGT = path.replace("images", "labels_masks")                
           if "RoadObsticle21" in pathGT:
             pathGT = pathGT.replace("webp", "png")
@@ -281,19 +287,19 @@ def main():
           norm_th = (best_treshold - np.min(anomaly_result)) / (np.max(anomaly_result) - np.min(anomaly_result)) 
 
         # USED TO SAVE THE IMAGES
-        #   plt.imsave(
-        #         save_path,
-        #         norm_an_res - norm_th,
-        #         cmap='bwr',
-        #   )
+          plt.imsave(
+                save_path,
+                norm_an_res - norm_th,
+                cmap='bwr',
+          )
 
         # #   print(ood_gts)
 
-        #   plt.imsave(
-        #         save_path2,
-        #         (ood_gts == 1) * 255,
-        #         cmap='bwr',
-        #   )
+          plt.imsave(
+                save_path2,
+                (ood_gts == 1) * 255,
+                cmap='bwr',
+          )
 
           if 1 not in np.unique(ood_gts):
               continue              
