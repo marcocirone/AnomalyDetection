@@ -9,26 +9,28 @@ import time
 import numpy as np
 import torch
 import math
-from torchprofile import profile_macs
+import sys
+
 from PIL import Image, ImageOps
 from argparse import ArgumentParser
-import zipfile
 
-import torch.nn as nn
 from torch.optim import SGD, Adam, lr_scheduler
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, CenterCrop, Normalize, Resize, Pad
-from torchvision.transforms import ToTensor, ToPILImage, transforms
-from erfnet_pruned import prune_and_return_model, remove_pruned_weights, local_prune_and_return_model, remove_and_save_local
+from torchvision.transforms import ToTensor, ToPILImage
+
 from dataset import VOC12,cityscapes
 from transform import Relabel, ToLabel, Colorize
 from visualize import Dashboard
-from torchsummary import summary
+
 import importlib
 from iouEval import iouEval, getColorEntry
 
 from shutil import copyfile
+import zipfile
+from erfnet_pruned import *
+from torchprofile import profile_macs
 
 NUM_CHANNELS = 3
 NUM_CLASSES = 20 #pascal=22, cityscapes=20
@@ -38,20 +40,15 @@ image_transform = ToPILImage()
 
 #Augmentations - different function implemented to perform random augments on both image and target
 class MyCoTransform(object):
-    def __init__(self, enc, model='erfnet', augment=True, height=512):
+    def __init__(self, enc, augment=True, height=512):
         self.enc=enc
         self.augment = augment
         self.height = height
-        self.model = model
         pass
     def __call__(self, input, target):
         # do something to both images
-        if self.model == 'erfnet' or self.model == 'bisenet':
-            input = Resize(self.height, Image.BILINEAR)(input)
-            target = Resize(self.height, Image.NEAREST)(target)
-        elif self.model == 'enet':
-            input = Resize((self.height, self.height), Image.BILINEAR)(input)
-            target = Resize((self.height, self.height), Image.NEAREST)(target)
+        input =  Resize(self.height, Image.BILINEAR)(input)
+        target = Resize(self.height, Image.NEAREST)(target)
 
         if(self.augment):
             # Random hflip
@@ -67,7 +64,7 @@ class MyCoTransform(object):
             input = ImageOps.expand(input, border=(transX,transY,0,0), fill=0)
             target = ImageOps.expand(target, border=(transX,transY,0,0), fill=255) #pad label filling with 255
             input = input.crop((0, 0, input.size[0]-transX, input.size[1]-transY))
-            target = target.crop((0, 0, target.size[0]-transX, target.size[1]-transY)) 
+            target = target.crop((0, 0, target.size[0]-transX, target.size[1]-transY))   
 
         input = ToTensor()(input)
         if (self.enc):
@@ -92,23 +89,49 @@ def zip_model(input_file, output_file):
     with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write(input_file)
 
+def last_layer_name(modello):
+    name = None
+    for name, module in modello.named_children():
+        pass  # Questo ciclo salverà l'ultimo nome incontrato
+    return name
+
+def unfreeze_last_layer(modello):
+    last_layer = last_layer_name(modello)
+    for nome, module in modello.named_children():
+        if nome == last_layer:
+            for parameter in module.parameters():
+                parameter.requires_grad = True
+        else:
+            for parameter in module.parameters():
+                parameter.requires_grad = False
+
+def load_my_state_dict(model, state_dict):
+    own_state = model.state_dict()
+    for name, param in state_dict.items():
+        if name not in own_state:
+            # Gestisce il caso in cui il state_dict caricato non ha il prefisso 'module.' ma il modello sì
+            prefixed_name = 'module.' + name  # Aggiunge il prefisso
+            if prefixed_name in own_state:
+                own_state[prefixed_name].copy_(param)
+            else:
+                if name.startswith('module.'):
+                    # Tentativo di rimuovere il prefisso 'module.' se presente e non necessario
+                    unprefixed_name = name.split('module.')[-1]
+                    if unprefixed_name in own_state:
+                        own_state[unprefixed_name].copy_(param)
+                    continue
+            print(name, ' not loaded')
+        else:
+            own_state[name].copy_(param)
+    return model
 
 def train(args, model, enc=False):
+    print("Input image size:", NUM_CHANNELS, args.height, args.height)
+    
     best_acc = 0
 
     #TODO: calculate weights by processing dataset histogram (now its being set by hand from the torch values)
     #create a loder to run all images and calculate histogram of labels, then create weight array using class balancing
-
-    def calculate_weights(dataset):
-        label_counts = torch.zeros(NUM_CLASSES)
-        for data in dataset:
-            _, labels = data
-            label_counts += torch.bincount(labels.flatten(), minlength=NUM_CLASSES)
-
-        total_samples = sum(label_counts)
-        weights = 1 / (label_counts / total_samples)
-
-        return weights
 
     weight = torch.ones(NUM_CLASSES)
     if (enc):
@@ -151,21 +174,15 @@ def train(args, model, enc=False):
         weight[16] = 10.289801597595	
         weight[17] = 10.405355453491	
         weight[18] = 10.138095855713	
-
+    
     weight[19] = 1
 
     assert os.path.exists(args.datadir), "Error: datadir (dataset directory) could not be loaded"
 
-    co_transform = MyCoTransform(enc, model=args.model, augment=True, height=args.height)#1024)
-    co_transform_val = MyCoTransform(enc, model=args.model, augment=False, height=args.height)#1024)
+    co_transform = MyCoTransform(enc, augment=True, height=args.height)#1024)
+    co_transform_val = MyCoTransform(enc, augment=False, height=args.height)#1024)
     dataset_train = cityscapes(args.datadir, co_transform, 'train')
     dataset_val = cityscapes(args.datadir, co_transform_val, 'val')
-
-    # weight = calculate_weights(dataset_train)
-    # weight = torch.tensor([3.0633,   18.5455,    4.9377,  171.8278,  128.4513,   91.6931,
-    #      541.4980,  204.2662,    7.0819,   97.3602,   27.9870,   92.8342,
-    #      838.7665,   16.1329,  422.4510,  479.7953,  485.2308, 1149.6392,
-    #      272.9657,    8.7985])
 
     loader = DataLoader(dataset_train, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=True)
     loader_val = DataLoader(dataset_val, num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False)
@@ -182,7 +199,7 @@ def train(args, model, enc=False):
         modeltxtpath = savedir + "/model_encoder.txt"
     else:
         automated_log_path = savedir + "/automated_log.txt"
-        modeltxtpath = savedir + "/model.txt"    
+        modeltxtpath = savedir + "/model.txt"
 
     if (not os.path.exists(automated_log_path)):    #dont add first line if it exists 
         with open(automated_log_path, "a") as myfile:
@@ -191,22 +208,18 @@ def train(args, model, enc=False):
     with open(modeltxtpath, "w") as myfile:
         myfile.write(str(model))
 
-
     #TODO: reduce memory in first gpu: https://discuss.pytorch.org/t/multi-gpu-training-memory-usage-in-balance/4163/4        #https://github.com/pytorch/pytorch/issues/1893
 
     #optimizer = Adam(model.parameters(), 5e-4, (0.9, 0.999),  eps=1e-08, weight_decay=2e-4)     ## scheduler 1
-    optimizer = Adam(model.parameters(), 5e-5, (0.9, 0.999),  eps=1e-08, weight_decay=1e-4)      ## scheduler 2
+    optimizer = Adam(model.parameters(), 5e-5 if args.fine_tuning else 5e-4, (0.9, 0.999),  eps=1e-08, weight_decay=1e-4)      ## scheduler 2
 
     start_epoch = 1
     if args.resume:
         #Must load weights, optimizer, epoch and best value. 
         if enc:
             filenameCheckpoint = savedir + '/checkpoint_enc.pth.tar'
-            print("checkpoint", filenameCheckpoint)
         else:
             filenameCheckpoint = savedir + '/checkpoint.pth.tar'
-            print("checkpoint", filenameCheckpoint)
-        print("ciao")
         print("checkpoint", filenameCheckpoint)
         assert os.path.exists(filenameCheckpoint), "Error: resume option was used but checkpoint was not found in folder"
         checkpoint = torch.load(filenameCheckpoint)
@@ -223,13 +236,6 @@ def train(args, model, enc=False):
     if args.visualize and args.steps_plot > 0:
         board = Dashboard(args.port)
 
-
-    """
-    if args.model == 'erfnet':
-        for param in model.parameters():
-            param.requires_grad=False
-        model.decoder.output_conv = nn.ConvTranspose2d( 16, NUM_CLASSES, 2, stride=2, padding=0, output_padding=0, bias=True)
-    """
     for epoch in range(start_epoch, args.num_epochs+1):
         print("----- TRAINING - EPOCH", epoch, "-----")
 
@@ -255,28 +261,24 @@ def train(args, model, enc=False):
         for step, (images, labels) in enumerate(loader):
 
             start_time = time.time()
-            #print (labels.size())
-            #print (np.unique(labels.numpy()))
-            #print("labels: ", np.unique(labels[0].numpy()))
-            #labels = torch.ones(4, 1, 512, 1024).long()
+
             if args.cuda:
                 images = images.cuda()
                 labels = labels.cuda()
 
             inputs = Variable(images)
             targets = Variable(labels)
-            if args.model == 'erfnet':
-                outputs = model(inputs, only_encode=enc) #if you are training erfnet
-            elif args.model == 'enet':
-                outputs = model(inputs) 
-            else:
-                outputs, _, _ = model(inputs)
 
-            #print("targets", np.unique(targets[:, 0].cpu().data.numpy()))
+            if args.model == 'erfnet':
+                outputs = model(inputs, only_encode=enc)
+            else:
+                if args.model == 'bisenetv1' or args.model == 'bisenetv2':
+                    outputs = model(inputs)[0]
+                else:
+                    outputs = model(inputs)
 
             optimizer.zero_grad()
-            #print(f"Outputs: {outputs.shape}")
-            #print(f"Targets: {targets.shape}")
+
             loss = criterion(outputs, targets[:, 0])
             loss.backward()
             optimizer.step()
@@ -285,18 +287,11 @@ def train(args, model, enc=False):
             time_train.append(time.time() - start_time)
 
             if (doIouTrain):
-                #start_time_iou = time.time()
                 iouEvalTrain.addBatch(outputs.max(1)[1].unsqueeze(1).data, targets.data)
-                #print ("Time to add confusion matrix: ", time.time() - start_time_iou)      
 
-            #print(outputs.size())
             if args.visualize and args.steps_plot > 0 and step % args.steps_plot == 0:
                 start_time_plot = time.time()
                 image = inputs[0].cpu().data
-                #image[0] = image[0] * .229 + .485
-                #image[1] = image[1] * .224 + .456
-                #image[2] = image[2] * .225 + .406
-                #print("output", np.unique(outputs[0].cpu().max(0)[1].data.numpy()))
                 board.image(image, f'input (epoch: {epoch}, step: {step})')
                 if isinstance(outputs, list):   #merge gpu tensors
                     board.image(color_transform(outputs[0][0].cpu().max(0)[1].data.unsqueeze(0)),
@@ -338,12 +333,14 @@ def train(args, model, enc=False):
 
             inputs = Variable(images, volatile=True)    #volatile flag makes it free backward or outputs for eval
             targets = Variable(labels, volatile=True)
+
             if args.model == 'erfnet':
-                outputs = model(inputs, only_encode=enc) #if you are training erfnet
-            elif args.model == 'enet':
-                outputs = model(inputs) 
+                outputs = model(inputs, only_encode=enc)
             else:
-                outputs, _, _ = model(inputs)
+                if args.model == 'bisenetv1' or args.model == 'bisenetv2':
+                    outputs = model(inputs)[0]
+                else:
+                    outputs = model(inputs)
 
             loss = criterion(outputs, targets[:, 0])
             epoch_loss_val.append(loss.item())
@@ -352,9 +349,7 @@ def train(args, model, enc=False):
 
             #Add batch to calculate TP, FP and FN for iou estimation
             if (doIouVal):
-                #start_time_iou = time.time()
                 iouEvalVal.addBatch(outputs.max(1)[1].unsqueeze(1).data, targets.data)
-                #print ("Time to add confusion matrix: ", time.time() - start_time_iou)
 
             if args.visualize and args.steps_plot > 0 and step % args.steps_plot == 0:
                 start_time_plot = time.time()
@@ -376,7 +371,6 @@ def train(args, model, enc=False):
                        
 
         average_epoch_loss_val = sum(epoch_loss_val) / len(epoch_loss_val)
-        #scheduler.step(average_epoch_loss_val, epoch)  ## scheduler 1   # update lr if needed
 
         iouVal = 0
         if (doIouVal):
@@ -398,7 +392,6 @@ def train(args, model, enc=False):
         else:
             filenameCheckpoint = savedir + '/checkpoint.pth.tar'
             filenameBest = savedir + '/model_best.pth.tar'
-        print("checkpoint: ", filenameCheckpoint)
         save_checkpoint({
             'epoch': epoch + 1,
             'arch': str(model),
@@ -432,7 +425,7 @@ def train(args, model, enc=False):
         with open(automated_log_path, "a") as myfile:
             myfile.write("\n%d\t\t%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t%.8f" % (epoch, average_epoch_loss_train, average_epoch_loss_val, iouTrain, iouVal, usedLr ))
         print(f"Time spent for epoch: {time.time() - begin_epoch}")   
-
+    
     return(model)   #return model (convenience for encoder-decoder training)
 
 def save_checkpoint(state, is_best, filenameCheckpoint, filenameBest):
@@ -452,10 +445,21 @@ def main(args):
         myfile.write(str(args))
 
     #Load Model
-    assert os.path.exists(args.model + ".py"), "Error: model definition not found"
+    assert os.path.exists("../models/" + args.model + ".py"), "Error: model definition not found"
+
+    # model_file = importlib.import_module("../models/" + args.model)
+    base_dir = os.path.dirname(__file__)  # Ottiene il percorso della directory del file corrente
+    models_path = os.path.join(base_dir, '..', 'models')  # Aggiunge '../models' al percorso
+
+    # Aggiungi il percorso della cartella models al sys.path se non è già presente
+    if models_path not in sys.path:
+        sys.path.append(models_path)
+
+    # Importa il modulo specificato in args.model
     model_file = importlib.import_module(args.model)
+
     model = model_file.Net(NUM_CLASSES)
-    copyfile(args.model + ".py", savedir + '/' + args.model + ".py")
+    copyfile("../models/" + args.model + ".py", savedir + '/' + args.model + ".py")
     
     if args.cuda:
         model = torch.nn.DataParallel(model).cuda()
@@ -473,157 +477,107 @@ def main(args):
         #state_dict = {k.partition('model.')[2]: v for k,v in state_dict}
         #https://discuss.pytorch.org/t/prefix-parameter-names-in-saved-model-if-trained-by-multi-gpu/494
         """
-        # def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
-        #     own_state = model.state_dict()
-        #     for name, param in state_dict.items():
-        #         if name not in own_state:
-        #             if name.startswith('module.'):
-        #                 own_state[name.split('module.')[-1]].copy_(param)
-        #             else:
-        #                 print(name, ' not loaded')
-        #                 continue
-        #         else:
-        #             own_state[name].copy_(param)
-        #     return model
 
-        #print(torch.load(args.state))
-        #model = load_my_state_dict(model, torch.load(args.state))
+        model = load_my_state_dict(model, torch.load(args.state))
 
-    '''
-    def weights_init(m):
-        classname = m.__class__.__name__
-        if classname.find('Conv') != -1:
-            #m.weight.data.normal_(0.0, 0.02)
-            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            m.weight.data.normal_(0, math.sqrt(2. / n))
-        elif classname.find('BatchNorm') != -1:
-            #m.weight.data.normal_(1.0, 0.02)
-            m.weight.data.fill_(1)
-            m.bias.data.fill_(0)
+    if args.fine_tuning:
 
-    #TO ACCESS MODEL IN DataParallel: next(model.children())
-    #next(model.children()).decoder.apply(weights_init)
-    #Reinitialize weights for decoder
-    
-    next(model.children()).decoder.layers.apply(weights_init)
-    next(model.children()).decoder.output_conv.apply(weights_init)
+        unfreeze_last_layer(model)
 
-    #print(model.state_dict())
-    f = open('weights5.txt', 'w')
-    f.write(str(model.state_dict()))
-    f.close()
-    '''
-
-    #train(args, model)
-    if (not args.decoder):
-        print("========== ENCODER TRAINING ===========")
-        model = train(args, model, True) #Train encoder
-    #CAREFUL: for some reason, after training encoder alone, the decoder gets weights=0. 
-    #We must reinit decoder weights or reload network passing only encoder in order to train decoder
-    print("========== DECODER TRAINING ===========")
-    if (not args.state):
-        if args.pretrainedEncoder:
-            print("Loading encoder pretrained in imagenet")
-            from erfnet_imagenet import ERFNet as ERFNet_imagenet
-            pretrainedEnc = torch.nn.DataParallel(ERFNet_imagenet(1000))
-            pretrainedEnc.load_state_dict(torch.load(args.pretrainedEncoder)['state_dict'])
-            pretrainedEnc = next(pretrainedEnc.children()).features.encoder
-            if (not args.cuda):
-                pretrainedEnc = pretrainedEnc.cpu()     #because loaded encoder is probably saved in cuda
+        weightspath = args.loadDir + args.loadWeights
+        if args.model == 'enet':
+            model = load_my_state_dict(model.module, torch.load(weightspath)['state_dict'])
         else:
-            pretrainedEnc = next(model.children()).encoder
-        model = model_file.Net(NUM_CLASSES, encoder=pretrainedEnc)  #Add decoder to encoder
-        if args.cuda:
-            model = torch.nn.DataParallel(model).cuda()
-        #When loading encoder reinitialize weights for decoder because they are set to 0 when training dec
-    print("Alleluia")
+            model = load_my_state_dict(model, torch.load(weightspath))
+
+        print('Loaded model for fine-tuning')
+
     if args.model == 'erfnet':
-        def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
-            own_state = model.state_dict()
-            for name, param in state_dict.items():
-                if name not in own_state:
-                    if name.startswith('module.'):
-                        own_state[name.split('module.')[-1]].copy_(param)
-                    else:
-                        print(name, ' not loaded')
-                        continue
-                else:
-                    own_state[name].copy_(param)
-            return model
-        model = load_my_state_dict(model, torch.load("/content/AnomalyDetection/trained_models/erfnet_pretrained.pth", map_location=lambda storage, loc: storage))
-    
-    if args.pruned == True and args.pruning == "global":
-      #print("Before train: args.pruned =", args.pruned)
-      new_mod = prune_and_return_model(model, 0.7)
-      model = train(args, new_mod, False)   #Train decoder
-      print("Decoder training completed.")
-      # Esegui il pruning
-      remove_pruned_weights(model)
-      print("Pruning completed.")
-      file2 = open("pruned.txt", "a")
-      for name,  params in model.state_dict().items():
-          file2.write(f"{name}: {params}\n")
-      input = torch.randn(1, 3, 512, 1024)
-      print(input.shape)
-      summary(model, input_size=(3, 512, 1024))
-      # for p in model.parameters():
-      #     print(p)
-      flops = profile_macs(model, input)
-      print(f"FLOPS: {flops / 10**9:.2f} GFLOPS")
-      # Salva il modello dopo il pruning
-      torch.save(model, "model_after_pruning.pth")
-      print("Model saved after pruning.")
-        # Zippa il modello dopo il pruning
-      zip_model("model_after_pruning.pth", "model_after_pruning.zip")
-      print("Model zipped after pruning.")
-        # Calcolo delle dimensioni del modello zippato prima e dopo il pruning
-      size_before_pruning = os.path.getsize("model_before_pruning.zip")
-      size_after_pruning = os.path.getsize("model_after_pruning.zip")
-        
-        # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
-      print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
-      print("Zipped model size after pruning:", size_after_pruning / (1024 * 1024), "MB")
-    
-    elif args.pruned == True and args.pruning == "local":
-      #print("Before train: args.pruned =", args.pruned)
-      new_mod = local_prune_and_return_model(model, 0.7)
-      model = train(args, new_mod, False)   #Train decoder
-      print("Decoder training completed.")
-      # Esegui il pruning
-      new_mod = remove_and_save_local(model)
-      print("Pruning completed.")
-      file2 = open("pruned.txt", "a")
-      for name,  params in model.state_dict().items():
-          file2.write (f"{name}: {params}\n")
-      input = torch.randn(1, 3, 512, 1024)
-      print(input.shape)
-      summary(model, input_size=(3, 512, 1024))
-      flops = profile_macs(model, input)
-      print(f"FLOPS: {flops / 10**9:.2f} GFLOPS")
-      size_before_pruning = os.path.getsize("model_before_pruning.zip")
-      size_after_pruning_local = os.path.getsize("model_after_pruning_local.zip")
-        
-        # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
-      print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
-      print("Zipped model size after pruning:", size_after_pruning_local / (1024 * 1024), "MB")
+        if args.pruned == True and args.pruning == "global":
+            #print("Before train: args.pruned =", args.pruned)
+            new_mod = prune_and_return_model(model, 0.7)
+            model = train(args, new_mod, False)   #Train decoder
+            print("Decoder training completed.")
+            # Esegui il pruning
+            remove_pruned_weights(model)
+            print("Pruning completed.")
+            file2 = open("pruned.txt", "a")
+            for name,  params in model.state_dict().items():
+                file2.write(f"{name}: {params}\n")
+            input = torch.randn(1, 3, 512, 1024)
+            print(input.shape)
+            summary(model, input_size=(3, 512, 1024))
+            # for p in model.parameters():
+            #     print(p)
+            flops = profile_macs(model, input)
+            print(f"FLOPS: {flops / 10**9:.2f} GFLOPS")
+            # Salva il modello dopo il pruning
+            torch.save(model, "model_after_pruning.pth")
+            print("Model saved after pruning.")
+                # Zippa il modello dopo il pruning
+            zip_model("model_after_pruning.pth", "model_after_pruning.zip")
+            print("Model zipped after pruning.")
+                # Calcolo delle dimensioni del modello zippato prima e dopo il pruning
+            size_before_pruning = os.path.getsize("model_before_pruning.zip")
+            size_after_pruning = os.path.getsize("model_after_pruning.zip")
+                
+                # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
+            print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
+            print("Zipped model size after pruning:", size_after_pruning / (1024 * 1024), "MB")
+            
+        elif args.pruned == True and args.pruning == "local":
+            #print("Before train: args.pruned =", args.pruned)
+            new_mod = local_prune_and_return_model(model, 0.7)
+            model = train(args, new_mod, False)   #Train decoder
+            print("Decoder training completed.")
+            # Esegui il pruning
+            new_mod = remove_and_save_local(model)
+            print("Pruning completed.")
+            file2 = open("pruned.txt", "a")
+            for name,  params in model.state_dict().items():
+                file2.write (f"{name}: {params}\n")
+            input = torch.randn(1, 3, 512, 1024)
+            print(input.shape)
+            summary(model, input_size=(3, 512, 1024))
+            flops = profile_macs(model, input)
+            print(f"FLOPS: {flops / 10**9:.2f} GFLOPS")
+            size_before_pruning = os.path.getsize("model_before_pruning.zip")
+            size_after_pruning_local = os.path.getsize("model_after_pruning_local.zip")
+                
+                # Stampa delle dimensioni dei modelli zippati prima e dopo il pruning
+            print("Zipped model size before pruning:", size_before_pruning / (1024 * 1024), "MB")
+            print("Zipped model size after pruning:", size_after_pruning_local / (1024 * 1024), "MB")
+        else:
+            model = train(args, model, False)   #Train decoder
+
+        if (not args.decoder):
+            print("========== ENCODER TRAINING ===========")
+            model = train(args, model, True) #Train encoder
+        #CAREFUL: for some reason, after training encoder alone, the decoder gets weights=0. 
+        #We must reinit decoder weights or reload network passing only encoder in order to train decoder
+        print("========== DECODER TRAINING ===========")
+        if (not args.state):
+            if args.pretrainedEncoder:
+                print("Loading encoder pretrained in imagenet")
+                from erfnet_imagenet import ERFNet as ERFNet_imagenet
+                pretrainedEnc = torch.nn.DataParallel(ERFNet_imagenet(1000))
+                pretrainedEnc.load_state_dict(torch.load(args.pretrainedEncoder)['state_dict'])
+                pretrainedEnc = next(pretrainedEnc.children()).features.encoder
+                if (not args.cuda):
+                    pretrainedEnc = pretrainedEnc.cpu()     #because loaded encoder is probably saved in cuda
+            else:
+                pretrainedEnc = next(model.children()).encoder
+            model = model_file.Net(NUM_CLASSES, encoder=pretrainedEnc)  #Add decoder to encoder
+            if args.cuda:
+                model = torch.nn.DataParallel(model).cuda()
+            #When loading encoder reinitialize weights for decoder because they are set to 0 when training dec
+        model = train(args, model, False)   #Train decoder
     else:
-      model = train(args, model, False)   #Train decoder
-    
-    """
-    print("After train: args.pruned =", args.pruned)
-    if args.pruned == True:
-      remove_pruned_weights(model)
-      # Salvataggio del modello pruned
-      torch.save(model, "model_after_pruning.pth")
-      # Zippare il modello pruned
-      zip_model("model_after_pruning.pth", "model_after_pruning.zip")
-    
-      #remove_and_save(model)
-      """
-      
+        model = train(args, model)
     print("========== TRAINING FINISHED ===========")
 
 if __name__ == '__main__':
+
     parser = ArgumentParser()
     parser.add_argument('--cuda', action='store_true', default=True)  #NOTE: cpu-only has not been tested so you might have to change code if you deactivate this flag
     parser.add_argument('--model', default="erfnet")
@@ -642,9 +596,16 @@ if __name__ == '__main__':
     parser.add_argument('--decoder', action='store_true')
     parser.add_argument('--pretrainedEncoder') #, default="../trained_models/erfnet_encoder_pretrained.pth.tar")
     parser.add_argument('--visualize', action='store_true')
-    parser.add_argument('--pruned', action = 'store_true')
+
     parser.add_argument('--iouTrain', action='store_true', default=False) #recommended: False (takes more time to train otherwise)
     parser.add_argument('--iouVal', action='store_true', default=True)  
     parser.add_argument('--resume', action='store_true')    #Use this flag to load last checkpoint for training  
-    parser.add_argument('--pruning', default = "global")
+
+    parser.add_argument('--fine-tuning', action='store_true', default=False)
+    parser.add_argument('--loadDir', default='../trained_models/')
+    parser.add_argument('--loadWeights')
+
+    parser.add_argument('--pruned', action='store_true')
+    parser.add_argument('--pruning', default="global")
+
     main(parser.parse_args())

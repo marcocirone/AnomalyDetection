@@ -3,12 +3,14 @@ import os
 import cv2
 import glob
 import torch
+import sys
+import importlib
 import random
 from PIL import Image
 import numpy as np
-from erfnet import ERFNet
-from enet import ENet
-from bisenet import BiSeNet
+# from erfnet import ERFNet
+# from enet import ENet
+# from bisenet import BiSeNet
 import os.path as osp
 from argparse import ArgumentParser
 from torchvision.transforms import Compose, Resize, ToTensor
@@ -43,22 +45,25 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = True
 
 #caricamento stato del modello
-def load_my_state_dict(model, state_dict, model_name):  #custom function to load model when not all dict elements
-        if(model_name == 'ERFNet' or model_name == "ENet" or model_name == "BiSeNet"):
-            own_state = model.state_dict()
-            for name, param in state_dict.items():
-                if name not in own_state:
-                    if name.startswith("module."):
-                        own_state[name.split("module.")[-1]].copy_(param)
-                    else:
-                        # print(name, " not loaded")
-                        continue
-                else:
-                    own_state[name].copy_(param)
+def load_my_state_dict(model, state_dict):
+    own_state = model.state_dict()
+    for name, param in state_dict.items():
+        if name not in own_state:
+            # Gestisce il caso in cui il state_dict caricato non ha il prefisso 'module.' ma il modello sì
+            prefixed_name = 'module.' + name  # Aggiunge il prefisso
+            if prefixed_name in own_state:
+                own_state[prefixed_name].copy_(param)
+            else:
+                if name.startswith('module.'):
+                    # Tentativo di rimuovere il prefisso 'module.' se presente e non necessario
+                    unprefixed_name = name.split('module.')[-1]
+                    if unprefixed_name in own_state:
+                        own_state[unprefixed_name].copy_(param)
+                    continue
+            print(name, ' not loaded')
         else:
-            print("else")
-            model = model.load_state_dict(state_dict)
-        return model
+            own_state[name].copy_(param)
+    return model
 
 def main():
     parser = ArgumentParser()
@@ -85,9 +90,9 @@ def main():
     anomaly_score_list = []
     ood_gts_list = []
 
-    if not os.path.exists('voidResults.txt'):
-        open('voidResults.txt', 'w').close()
-    file = open('voidResults.txt', 'a')
+    if not os.path.exists('../results/voidResults.txt'):
+        open('../results/voidResults.txt', 'w').close()
+    file = open('../results/voidResults.txt', 'a')
 
     modelpath = args.loadDir + args.loadModel
     weightspath = args.loadDir + args.loadWeights
@@ -95,39 +100,32 @@ def main():
     print ("Loading model: " + modelpath)
     print ("Loading weights: " + weightspath)
 
-    if(args.model == 'ENet'):
-        print("Enet")
-        model = ENet(NUM_CLASSES)
-    elif(args.model == 'BiSeNet'):
-        model = BiSeNet(NUM_CLASSES)
-    else:
-        model = ERFNet(NUM_CLASSES)
-    if (not args.cpu):
-        model = torch.nn.DataParallel(model).cuda()
+    base_dir = os.path.dirname(__file__)  # Ottiene il percorso della directory del file corrente
+    models_path = os.path.join(base_dir, '..', 'models')  # Aggiunge '../models' al percorso
+
+    # Aggiungi il percorso della cartella models al sys.path se non è già presente
+    if models_path not in sys.path:
+        sys.path.append(models_path)
+
+    # Importa il modulo specificato in args.model
+    model_file = importlib.import_module(args.model)
+
+    model = model_file.Net(NUM_CLASSES)
 
     print(weightspath)
     state_dict = torch.load(weightspath, map_location=lambda storage, loc: storage)
-    for (name, p) in state_dict.items():
-            print(name)
     if(args.model == ''):
-        # print(state_dict)
-        # for (name, p) in model.state_dict().items():
-        #     print(name)
         state_dict = {k if k.startswith("module.") else "module." + k: v for k, v in state_dict.items()}
         model.load_state_dict(state_dict)
     else:
-        model = load_my_state_dict(model, state_dict, args.model)
-    #print(model)
+        model = load_my_state_dict(model, state_dict)
     print ("Model and weights LOADED successfully")
     model.eval()
     
     tested_dataset = "RoadAnomaly21"
     for path in glob.glob(os.path.expanduser(str(args.input[0]))):
           print(path)
-        #   images = torch.from_numpy(np.array(Image.open(path).convert('RGB'))).unsqueeze(0).float()
           images = input_transform((Image.open(path).convert('RGB'))).unsqueeze(0).float()
-        #   images = images.permute(0,3,1,2)
-          print(images.shape)
           with torch.no_grad():
             if(str(args.model) == 'BiSeNet'):
                 result = model(images)[0]
