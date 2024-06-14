@@ -5,8 +5,6 @@
 
 import numpy as np
 import torch
-import sys
-import importlib
 import torch.nn.functional as F
 import os
 import importlib
@@ -44,67 +42,68 @@ target_transform_cityscapes = Compose([
     Relabel(255, 19),   #ignore label to 19
 ])
 
-def load_my_state_dict(model, state_dict):
-    own_state = model.state_dict()
-    for name, param in state_dict.items():
-        if name not in own_state:
-            # Gestisce il caso in cui il state_dict caricato non ha il prefisso 'module.' ma il modello sì
-            prefixed_name = 'module.' + name  # Aggiunge il prefisso
-            if prefixed_name in own_state:
-                own_state[prefixed_name].copy_(param)
-            else:
-                if name.startswith('module.'):
-                    # Tentativo di rimuovere il prefisso 'module.' se presente e non necessario
-                    unprefixed_name = name.split('module.')[-1]
-                    if unprefixed_name in own_state:
-                        own_state[unprefixed_name].copy_(param)
-                    continue
-            print(name, ' not loaded')
+def load_my_state_dict(model, state_dict, model_name):  #custom function to load model when not all dict elements
+        if(model_name == 'ERFNet'):
+            own_state = model.state_dict()
+            for name, param in state_dict.items():
+                if name not in own_state:
+                    if name.startswith("module."):
+                        own_state[name.split("module.")[-1]].copy_(param)
+                    else:
+                        print(name, " not loaded")
+                        continue
+                else:
+                    own_state[name].copy_(param)
         else:
-            own_state[name].copy_(param)
-    return model
+            model = model.load_state_dict(state_dict)
+        return model
 
 def main(args):
+
+    
+
     modelpath = args.loadDir + args.loadModel
     weightspath = args.loadDir + args.loadWeights
 
     print ("Loading model: " + modelpath)
     print ("Loading weights: " + weightspath)
-
-    base_dir = os.path.dirname(__file__)  # Ottiene il percorso della directory del file corrente
-    models_path = os.path.join(base_dir, '..', 'models')  # Aggiunge '../models' al percorso
-
-    # Aggiungi il percorso della cartella models al sys.path se non è già presente
-    if models_path not in sys.path:
-        sys.path.append(models_path)
-
-    # Importa il modulo specificato in args.model
-    model_file = importlib.import_module(args.model)    
-
-    if not args.pruned and not args.quantize:
-        model = model_file.Net(NUM_CLASSES)
-    elif args.pruned == True and args.pruning == 'global':
+    
+    if(args.model == 'ENet'):
+        model = ENet(NUM_CLASSES)
+    elif(args.model == 'BiSeNet'):
+        model = BiSeNet(NUM_CLASSES)
+    else:
+        model = ERFNet(NUM_CLASSES)
+    if args.pruned == True and args.pruning == 'global':
         model = prune_and_return_model(model, 0.7)
     elif args.pruned == True and args.pruning == 'local':
         model = local_prune_and_return_model(model, 0.7)
     elif args.quantize:
+        model = Net(NUM_CLASSES)
         model = quantize_model(model, args, False)
+        print("Model quantized")
+
 
     #model = torch.nn.DataParallel(model)
     if (not args.cpu):
         model = torch.nn.DataParallel(model).cuda()
 
+    
+
     state_dict = torch.load(weightspath, map_location=lambda storage, loc: storage)
     if(args.model == 'ENet' or args.model == 'BiSeNet'):
+        #print(state_dict)
         state_dict = {k if k.startswith("module.") else "module." + k: v for k, v in state_dict.items()}
         model.load_state_dict(state_dict)
     elif (args.quantize):
+        print("Load nothing")
         # model = load_quant_dict(model, state_dict)
         model.load_state_dict(state_dict)
     else:
-        model = load_my_state_dict(model, state_dict)
+        model = load_my_state_dict(model, state_dict, args.model)
     #print(model)
     print ("Model and weights LOADED successfully")
+
 
     model.eval()
 
@@ -114,18 +113,25 @@ def main(args):
 
     loader = DataLoader(cityscapes(args.datadir, input_transform_cityscapes, target_transform_cityscapes, subset=args.subset), num_workers=args.num_workers, batch_size=args.batch_size, shuffle=False)
 
+
     iouEvalVal = iouEval(NUM_CLASSES)
 
     start = time.time()
 
+    print(len(loader))
+
     for step, (images, labels, filename, filenameGt) in enumerate(loader):
+        print(step)
         if (not args.cpu):
             images = images.cuda()
             labels = labels.cuda()
+        print(images.shape)
 
         inputs = Variable(images)
         with torch.no_grad():
             outputs = model(inputs)
+            print("Hello there?")
+        print("Obtained output")
 
         if(model == 'Enet'):
             outputs = torch.roll(outputs, -1, 1)
@@ -135,6 +141,10 @@ def main(args):
           iouEvalVal.addBatch(outputs.max(1)[1].unsqueeze(1).data, labels)
         else:
           iouEvalVal.addBatch(outputs[0].max(1)[1].unsqueeze(1).data, labels)
+        
+        filenameSave = filename[0].split("leftImg8bit/")[1]
+
+        print(step, filenameSave)
 
     iouVal, iou_classes = iouEvalVal.getIoU()
 
@@ -145,9 +155,9 @@ def main(args):
         iouStr = '{:0.2f}'.format(iou_classes[i]*100)
         iou_classes_str.append(iouStr)
 
-    if not os.path.exists('../results/voidIoUResults.txt'):
-        open('../results/voidIoUResults.txt', 'w').close()
-    with open('../results/voidIoUResults.txt', 'a') as f:
+    if not os.path.exists('voidIoUResults.txt'):
+        open('voidIoUResults.txt', 'w').close()
+    with open('voidIoUResults.txt', 'a') as f:
         print("---------------------------------------", file=f)
         if args.pruned and args.pruning == 'global':
           print("Model", args.model, "with global pruning", "Took", time.time() - start, "seconds", file=f)

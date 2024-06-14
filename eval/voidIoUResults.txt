@@ -1,28 +1,28 @@
----------------------------------------
-Model ENet without pruning Took 133.7105278968811 seconds
-=======================================
+=====================================
+Model ENet without pruning  Took 107.23221206665039 seconds
+=====================================
 Per-Class IoU:
-57.27 Road
-4.66 sidewalk
-0.17 building
-0.01 wall
-0.00 fence
-0.60 pole
-0.95 traffic light
-1.02 traffic sign
-0.37 vegetation
-0.60 terrain
-0.01 sky
-2.42 person
-0.00 rider
-0.00 car
-0.00 truck
-0.00 bus
-0.00 train
-0.00 motorcycle
-2.20 bicycle
-=======================================
-MEAN IoU:  3.70 %
+96.08 Road
+72.73 sidewalk
+85.86 building
+39.12 wall
+36.36 fence
+43.00 pole
+47.34 traffic light
+53.41 traffic sign
+87.09 vegetation
+55.87 terrain
+88.51 sky
+63.03 person
+34.65 rider
+80.67 car
+30.48 truck
+47.19 bus
+33.04 train
+2.72 motorcycle
+60.47 bicycle
+=====================================
+MEAN IoU:  55.66 %
 ---------------------------------------
 Model ERFNet without pruning Took 93.52724885940552 seconds
 =======================================
